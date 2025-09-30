@@ -7,7 +7,7 @@
 
 |Name|Description|
 |---|---|
-| Power Supply | Eurorack ±12V (2x5pin)<br> +12V:22mA<br>-12V:4mA |
+| Power Supply | Eurorack ±12V (2x5pin)<br> +12V:26mA<br>-12V:8mA |
 | Width | Eurorack 4HP |
 | Depth | 300mm (Depth from panel) |
 | Microcontroller | RP2040 (Waveshare RP2040 ZERO) |
