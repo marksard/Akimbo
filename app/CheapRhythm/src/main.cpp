@@ -240,8 +240,6 @@ void loop()
     int16_t potValue = pot.analogReadDirectFast();
 
     static CheapRhythm88::Type drum = CheapRhythm88::Type::DRUM_KICK;
-    float drumtype = in2Value * adcTypeRatio;
-    int16_t pitch = (drumtype - (int)drumtype) * 100;
     static int16_t edgeCV = 0;
     static int16_t edgePitch = 0;
     if (in1EdgeLatch)
@@ -249,13 +247,16 @@ void loop()
         cr88.start();
         in1EdgeLatch = false;
         edgeCV = cvInValue;
-        edgePitch = pitch;
-    }
-    drum = (CheapRhythm88::Type)(drumtype);
-    cr88.update(drum, edgePitch, edgeCV);
 
-    rgbLedControl.setRLevelMap(gateEdge.getValue() ? drumtype : 0, CheapRhythm88::Type::DRUM_KICK, CheapRhythm88::Type::DRUM_TYPE_MAX - 1);
-    rgbLedControl.setBLevelMap(edgeCV, 0, ADC_RESO - 1);
+        float drumtype = in2Value * adcTypeRatio;
+        int16_t pitch = (drumtype - (int)drumtype) * 100;
+        edgePitch = pitch;
+        drum = (CheapRhythm88::Type)(drumtype);
+    }
+    cr88.update(drum, edgePitch, edgeCV, gateEdge.getValue());
+
+    // rgbLedControl.setRLevelMap(gateEdge.getValue() ? drumtype : 0, CheapRhythm88::Type::DRUM_KICK, CheapRhythm88::Type::DRUM_TYPE_MAX - 1);
+    // rgbLedControl.setBLevelMap(edgeCV, 0, ADC_RESO - 1);
 
     rgbLedControl.process();
     tight_loop_contents();

@@ -51,7 +51,7 @@ public:
         svfHiHat.init(_resolution, signedOut);
         svfHiHat.setParameter(0.9, 0.5);
         svfSnare.init(_resolution, signedOut);
-        svfSnare.setParameter(0.05, 1.0);
+        svfSnare.setParameter(0.05, 0.07);
     }
 
     inline float calcFrequencyModulation(int16_t base, int16_t adder, float mod)
@@ -64,26 +64,32 @@ public:
         return base + adder + (mod * 0.097);
     }
 
-    void update(Type type, int16_t pitchMod, float decayMod)
+    void update(Type type, int16_t pitchMod, float decayMod, bool gate)
     {
+        if (gate)
+        {
+            decayMod = 4000; // gate on when long decay
+            // _tvaEnvIndex = 0.0;
+        }
+
         _type = type;
         switch (type)
         {
         case DRUM_KICK:
             updateDecay(decayMod, 1);
-            updatePitchDecay(0.1);
+            updatePitchDecay(0.0001);
             _osc.setFrequency(calcFrequencyAdder(kickFreq, pitchMod >> 2, _cheapMode ? 0 : (_pitchEnvValue)));
             _osc.setWave(MiniOsc::TRI);
             _osc.setLevel(_resoBit);
-            _osc2.setLevel(_resoBit - 5);
+            _osc2.setLevel(0);
             break;
         case DRUM_SNARE:
-            updateDecay(decayMod, 0);
-            updatePitchDecay(0.5);
-            _osc.setFrequency(calcFrequencyModulation(300, pitchMod, _cheapMode ? 0 : (_pitchEnvValue / 4096.0)));
+            updateDecay(decayMod, 1);
+            updatePitchDecay(0.6);
+            _osc.setFrequency(calcFrequencyModulation(300, pitchMod >> 3, _cheapMode ? 0 : (_pitchEnvValue / 4096.0)));
             _osc.setWave(MiniOsc::TRI);
-            _osc.setLevel(_resoBit - 1);
-            _osc2.setLevel(_resoBit - 1);
+            _osc.setLevel(_resoBit);
+            _osc2.setLevel(_resoBit - 2);
             break;
         case DRUM_HIHAT:
             updateDecay(decayMod, 0);
@@ -95,10 +101,10 @@ public:
         case DRUM_TOM:
             updateDecay(decayMod, 1);
             updatePitchDecay(tomPitchDecay);
-            _osc.setFrequency(calcFrequencyAdder(40, pitchMod, _cheapMode ? 0 : _pitchEnvValue / 1.5));
+            _osc.setFrequency(calcFrequencyAdder(40, pitchMod >> 2, _cheapMode ? 0 : _pitchEnvValue / 1.5));
             _osc.setWave(MiniOsc::TRI);
             _osc.setLevel(_resoBit);
-            _osc2.setLevel(_resoBit - 4);
+            _osc2.setLevel(0);
             break;
         default:
             break;
@@ -108,10 +114,13 @@ public:
     uint16_t process()
     {
         if (!_start || _tvaEnvIndex >= decayCurveSize)
+        {
+            _start = false;
             return _resoHalf;
+        }
 
         // クリップさせて歪ませる
-        int16_t value = constrain(_osc.getWaveValue() + (int16_t)_osc2.getWaveValue(), -(_resoHalf), (_resoHalf) - 1);
+        int16_t value = constrain(_osc.getWaveValue() + _osc2.getWaveValue(), -(_resoHalf), (_resoHalf) - 1);
         if (!_cheapMode && _type == Type::DRUM_HIHAT)
         {
             svfHiHat.process(value);
@@ -188,6 +197,7 @@ private:
             _start = false;
             return;
         }
+
         // 範囲を0.1～0.95に制限
         const float adcDecayRatio1 = 0.75 / _adcResoM1;
         const float adcDecayRatio2 = 0.85 / _adcResoM1;
@@ -200,7 +210,10 @@ private:
     void updatePitchDecay(float value)
     {
         if (_pitchEnvIndex >= decayCurveSize)
+        {
             return;
+        }
+
         float decay = (1.0 - value);
         _pitchEnvValue = decayCurve[(int)_pitchEnvIndex];
         _pitchEnvIndex += decay;
