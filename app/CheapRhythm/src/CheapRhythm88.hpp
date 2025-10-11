@@ -48,10 +48,10 @@ public:
         _resoM1 = _resolution - 1;
         _resoHalf = _resolution >> 1;
         _adcResoM1 = adcReso - 1;
-        svfHiHat.init(_resolution, signedOut);
-        svfHiHat.setParameter(0.9, 0.5);
         svfSnare.init(_resolution, signedOut);
         svfSnare.setParameter(0.05, 0.07);
+        svfHiHat.init(_resolution, signedOut);
+        svfHiHat.setParameter(0.6, 0.90);
     }
 
     inline float calcFrequencyModulation(int16_t base, int16_t adder, float mod)
@@ -78,7 +78,7 @@ public:
         case DRUM_KICK:
             updateDecay(decayMod, 1);
             updatePitchDecay(0.0001);
-            _osc.setFrequency(calcFrequencyAdder(kickFreq, pitchMod >> 2, _cheapMode ? 0 : (_pitchEnvValue)));
+            _osc.setFrequency(calcFrequencyAdder(kickFreq, pitchMod >> 3, _cheapMode ? 0 : (_pitchEnvValue)));
             _osc.setWave(MiniOsc::TRI);
             _osc.setLevel(_resoBit);
             _osc2.setLevel(0);
@@ -164,8 +164,8 @@ public:
     {
         if (value == 0)
             return;
-        snarePatamA = constrain(snarePatamA + value, 0, 5);
-        float cutoff = snarePatamA * 0.02 + 0.001;
+        snarePatamA = constrain(snarePatamA + value, 2, 7);
+        float cutoff = snarePatamA * 0.01 + 0.001;
         svfSnare.setCutoffFrequency(cutoff);
     }
 
@@ -174,7 +174,7 @@ public:
     {
         if (value == 0)
             return;
-        hihatPatamA = constrain(hihatPatamA + value, 0, 5);
+        hihatPatamA = constrain(hihatPatamA + value, 1, 5);
         float resolution = hihatPatamA * 0.10 + 0.04;
         svfHiHat.setResonance(resolution);
     }

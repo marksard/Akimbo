@@ -82,7 +82,7 @@ static Mode mode = Mode::MONITOR;
 static RGBLEDPWMControl::MenuColor menuColor = RGBLEDPWMControl::MenuColor::RED;
 
 CheapRhythm88 cr88;
-const float adcTypeRatio = (double)CheapRhythm88::Type::DRUM_TYPE_MAX / ADC_RESO;
+const float adcTypeRatio = 60.0 / 4096.0;
 MiniOsc lfo;
 
 //////////////////////////////////////////
@@ -248,10 +248,9 @@ void loop()
         in1EdgeLatch = false;
         edgeCV = cvInValue;
 
-        float drumtype = in2Value * adcTypeRatio;
-        int16_t pitch = (drumtype - (int)drumtype) * 100;
-        edgePitch = pitch;
-        drum = (CheapRhythm88::Type)(drumtype);
+        uint8_t drumtype = in2Value * adcTypeRatio;
+        edgePitch = (drumtype % 3) * 32;
+        drum = (CheapRhythm88::Type)(drumtype / 3 % 4);
     }
     cr88.update(drum, edgePitch, edgeCV, gateEdge.getValue());
 
