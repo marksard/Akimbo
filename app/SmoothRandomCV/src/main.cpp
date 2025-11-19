@@ -235,20 +235,20 @@ void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t i
         in2EdgeLatch = false;
     }
 
-    static int32_t sampleFreq = 0;
-    sampleFreq = getSamplingFrequency();
-    static int16_t cnt = 0;
-    if (++cnt > 10000)
-    {
-        cnt = 0;
-        Serial.print("SampleFreq:");
-        Serial.print(sampleFreq);
-        Serial.print(" level[0]:");
-        Serial.print(level[0]);
-        Serial.print(" level[1]:");
-        Serial.print(level[1]);
-        Serial.println();
-    }
+    // static int32_t sampleFreq = 0;
+    // sampleFreq = getSamplingFrequency();
+    // static int16_t cnt = 0;
+    // if (++cnt > 10000)
+    // {
+    //     cnt = 0;
+    //     Serial.print("SampleFreq:");
+    //     Serial.print(sampleFreq);
+    //     Serial.print(" level[0]:");
+    //     Serial.print(level[0]);
+    //     Serial.print(" level[1]:");
+    //     Serial.print(level[1]);
+    //     Serial.println();
+    // }
 }
 
 void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
@@ -285,16 +285,20 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
         {
         case SettingMenu::SEL_STYLE:
             userConfig.Config.style[index] = (WaveStyle)constrain((int8_t)(userConfig.Config.style[index] + encValue), WaveStyle::STYLE_RAW, WaveStyle::STYLE_MAX);
+            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.style[index], (int8_t)WaveStyle::STYLE_RAW, (int8_t)WaveStyle::STYLE_MAX);
             break;
         case SettingMenu::SEL_ALGORITHM:
             userConfig.Config.algorithm[index] = constrain(userConfig.Config.algorithm[index] + encValue, 0, 1);
             rndCV[index].enableFluctuation(userConfig.Config.algorithm[index] == 1 ? true : false);
+            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.algorithm[index], (int8_t)0, (int8_t)1);
             break;
         case SettingMenu::SEL_RUNMODE:
             userConfig.Config.runMode[index] = constrain(userConfig.Config.runMode[index] + encValue, 0, 1);
+            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.runMode[index], (int8_t)0, (int8_t)1);
             break;
         case SettingMenu::SEL_OCTAVE:
             userConfig.Config.octave[index] = constrain(userConfig.Config.octave[index] + encValue, 1, 5);
+            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.octave[index], (int8_t)1, (int8_t)5);
             break;
         default:
             break;
