@@ -530,7 +530,6 @@ void setup()
     // }
     // delay(500);
 
-    analogReadResolution(ADC_BIT);
     pinMode(23, OUTPUT);
     gpio_put(23, HIGH);
 
