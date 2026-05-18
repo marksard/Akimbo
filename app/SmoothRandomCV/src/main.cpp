@@ -26,6 +26,7 @@
 
 #include "Helper.h"
 #include "lib/Quantizer.hpp"
+#include "lib/EdgeChecker.hpp"
 #include "SmoothRandomCV.hpp"
 
 enum ChannelSelect
@@ -37,7 +38,8 @@ enum ChannelSelect
 
 enum SettingMenu
 {
-    SEL_STYLE = 0,
+    SEL_TAP_TEMPO = 0,
+    SEL_STYLE,
     SEL_ALGORITHM,
     SEL_RUNMODE,
     SEL_OCTAVE,
@@ -86,11 +88,12 @@ static ValueLock potLock;
 // gpio割り込み
 static volatile bool in1EdgeLatch = false;
 static volatile bool in2EdgeLatch = false;
+static EdgeChecker clockEdge;
 
 // UIほか
 static RGBLEDPWMControl::MenuColor oscColor = RGBLEDPWMControl::MenuColor::BLACK;
 static EEPROMConfigIO<SystemConfig> systemConfig(0);
-static SettingMenu settingMenu = SettingMenu::SEL_STYLE;
+static SettingMenu settingMenu = SettingMenu::SEL_TAP_TEMPO;
 static ChannelSelect channelSelect = ChannelSelect::RND_A;
 
 // 機能
@@ -135,17 +138,20 @@ void updateMenuColor()
         oscColor = RGBLEDPWMControl::MenuColor::CYAN;
         switch (settingMenu)
         {
-        case SettingMenu::SEL_STYLE:
+        case SettingMenu::SEL_TAP_TEMPO:
             rgbLedControl.resetFreq();
             break;
-        case SettingMenu::SEL_ALGORITHM:
+        case SettingMenu::SEL_STYLE:
             rgbLedControl.setFreq(2);
             break;
-        case SettingMenu::SEL_RUNMODE:
+        case SettingMenu::SEL_ALGORITHM:
             rgbLedControl.setFreq(4);
             break;
-        case SettingMenu::SEL_OCTAVE:
+        case SettingMenu::SEL_RUNMODE:
             rgbLedControl.setFreq(8);
+            break;
+        case SettingMenu::SEL_OCTAVE:
+            rgbLedControl.setFreq(16);
             break;
         default:
             break;
@@ -156,17 +162,20 @@ void updateMenuColor()
         oscColor = RGBLEDPWMControl::MenuColor::MAGENTA;
         switch (settingMenu)
         {
-        case SettingMenu::SEL_STYLE:
+        case SettingMenu::SEL_TAP_TEMPO:
             rgbLedControl.resetFreq();
             break;
-        case SettingMenu::SEL_ALGORITHM:
+        case SettingMenu::SEL_STYLE:
             rgbLedControl.setFreq(2);
             break;
-        case SettingMenu::SEL_RUNMODE:
+        case SettingMenu::SEL_ALGORITHM:
             rgbLedControl.setFreq(4);
             break;
-        case SettingMenu::SEL_OCTAVE:
+        case SettingMenu::SEL_RUNMODE:
             rgbLedControl.setFreq(8);
+            break;
+        case SettingMenu::SEL_OCTAVE:
+            rgbLedControl.setFreq(16);
             break;
         default:
             break;
@@ -178,14 +187,14 @@ void updateMenuColor()
 
 void changeMenu(int encValue)
 {
-    settingMenu = (SettingMenu)constrain((int8_t)(settingMenu + encValue), SettingMenu::SEL_STYLE, SettingMenu::SEL_MAX);
+    settingMenu = (SettingMenu)constrain((int8_t)(settingMenu + encValue), SettingMenu::SEL_TAP_TEMPO, SettingMenu::SEL_MAX);
     updateMenuColor();
 }
 
 void toggleChannel()
 {
     channelSelect = channelSelect == ChannelSelect::RND_A ? ChannelSelect::RND_B : ChannelSelect::RND_A;
-    settingMenu = SettingMenu::SEL_STYLE;
+    settingMenu = SettingMenu::SEL_TAP_TEMPO;
     updateMenuColor();
 }
 
@@ -209,30 +218,40 @@ bool updatePotLock(int16_t potValue, int8_t sel1, int8_t sel2)
 
 void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t in2Value)
 {
-    bool edges[RND_COUNT] = {in1EdgeLatch, in2EdgeLatch};
-    int16_t level[RND_COUNT] = {0};
-    for (int i = 0; i < RND_COUNT; ++i)
+    // taptempo process
     {
-        bool on = (userConfig.Config.runMode[i] == 1) ? edges[i] : true;
-        rndCV[i].update(on, true);
-        level[i] = (int16_t)rndCV[i].getLevel();
-        if (userConfig.Config.style[i] == WaveStyle::STYLE_PITCH)
+        static volatile ulong lastTime = 0;
+        ulong currentTime = micros();
+        int duration = clockEdge.getDurationMicros();
+        if (currentTime - lastTime > duration)
         {
-            level[i] = quantizer.Quantize(map(level[i], 0, ADC_RESO - 1, 0, (7 * userConfig.Config.octave[i]))) + bias;
+            lastTime = currentTime;
+            in1EdgeLatch = true;
+            dac.out2(DAC_RESO - 1);
+        }
+        else if (currentTime - lastTime > (duration >> 1))
+        {
+            dac.out2(DAC_RESO >> 1);
+        }
+        else
+        {
+            in1EdgeLatch = false;
         }
     }
 
-    dac.out1(level[0]);
-    dac.out2(level[1]);
+    bool on = (userConfig.Config.runMode[0] == 1) ? in1EdgeLatch : true;
+    rndCV[0].update(on, true);
+    int16_t level = (int16_t)rndCV[0].getLevel();
+    if (userConfig.Config.style[0] == WaveStyle::STYLE_PITCH)
+    {
+        level = quantizer.Quantize(map(level, 0, ADC_RESO - 1, 0, (7 * userConfig.Config.octave[0]))) + bias;
+    }
+
+    dac.out1(level);
 
     if (in1EdgeLatch)
     {
         in1EdgeLatch = false;
-    }
-
-    if (in2EdgeLatch)
-    {
-        in2EdgeLatch = false;
     }
 
     // static int32_t sampleFreq = 0;
@@ -256,6 +275,11 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     int8_t index = channelSelect;
     if (buttonStates == ButtonCondition::UA)
     {
+        if (settingMenu == SettingMenu::SEL_TAP_TEMPO)
+        {
+            clockEdge.updateEdge(1);
+            clockEdge.updateEdge(0);
+        }
         changeMenu(-1);
     }
     else if (buttonStates == ButtonCondition::UB)
@@ -283,6 +307,9 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     {
         switch (settingMenu)
         {
+        case SEL_TAP_TEMPO:
+            rgbLedControl.setFreq(1000.0 / clockEdge.getDurationMills());
+            break;
         case SettingMenu::SEL_STYLE:
             userConfig.Config.style[index] = (WaveStyle)constrain((int8_t)(userConfig.Config.style[index] + encValue), WaveStyle::STYLE_RAW, WaveStyle::STYLE_MAX);
             rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.style[index], (int8_t)WaveStyle::STYLE_RAW, (int8_t)WaveStyle::STYLE_MAX);
@@ -343,10 +370,12 @@ void edgeCallback(uint gpio, uint32_t events)
     {
         if (events & GPIO_IRQ_EDGE_RISE)
         {
+            clockEdge.updateEdge(1);
             in1EdgeLatch = true;
         }
         else if (events & GPIO_IRQ_EDGE_FALL)
         {
+            clockEdge.updateEdge(0);
             in1EdgeLatch = false;
         }
     }
@@ -387,11 +416,12 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    in1.init(IN1);
+    // in1.init(IN1);
     in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
+    clockEdge.init(IN1);
 
     rgbLedControl.init(30000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(RGBLEDPWMControl::MenuColor::BLACK);
@@ -403,7 +433,7 @@ void setup()
     userConfig.loadUserConfig();
 
     adcErrorCorrection.init(systemConfig.Config.vRef, systemConfig.Config.noiseFloor);
-    
+
     quantizer.setScale(5); // minor
     for (int i = 0; i < RND_COUNT; ++i)
     {
@@ -426,7 +456,8 @@ void loop()
 {
     int8_t encValue = enc.getDirection(true);
     int16_t cvInValue = cvIn.analogReadDirectFast() - bias;
-    int16_t in1Value = adcErrorCorrection.correctedAdc(in1.analogReadDirectFast());
+    // int16_t in1Value = adcErrorCorrection.correctedAdc(in1.analogReadDirectFast());
+    int16_t in1Value = 0;
     int16_t in2Value = adcErrorCorrection.correctedAdc(in2.analogReadDirectFast());
     int16_t potValue = adcErrorCorrection.correctedAdc(pot.analogReadDirectFast());
 
