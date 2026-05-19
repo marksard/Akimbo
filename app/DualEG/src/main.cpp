@@ -77,9 +77,9 @@ enum ButtonCondition
 static uint interruptSliceNum;
 static RotaryEncoder enc;
 static Button buttons[3];
-static SmoothAnalogRead in1;
+// static SmoothAnalogRead in1;
 static SmoothAnalogRead cvIn;
-static SmoothAnalogRead in2;
+// static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 // static ADCErrorCorrection adcErrorCorrection;
@@ -389,8 +389,8 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    in1.init(IN1);
-    in2.init(IN2);
+    // in1.init(IN1);
+    // in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
@@ -412,7 +412,8 @@ void setup()
     }
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
+    gpio_init(IN1);
+    gpio_init(IN2);
     gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_callback(edgeCallback);

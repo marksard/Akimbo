@@ -78,7 +78,7 @@ static RotaryEncoder enc;
 static Button buttons[3];
 static SmoothAnalogRead in1;
 static SmoothAnalogRead cvIn;
-static SmoothAnalogRead in2;
+// static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
@@ -86,7 +86,7 @@ static Mcp4922SwSpi dac;
 static ValueLock potLock;
 
 // gpio割り込み
-static volatile bool in1EdgeLatch = false;
+static volatile bool in2EdgeLatch = false;
 static EdgeChecker gateEdge;
 
 // UIほか
@@ -268,9 +268,9 @@ void processVCO(int16_t in1Value, int16_t cvInValue, int16_t potValue)
     int8_t seventhMinus = r7OctSet[userConfig.Config.r7OctSelect][1];
 
     // arpeggio
-    if (in1EdgeLatch)
+    if (in2EdgeLatch)
     {
-        in1EdgeLatch = false;
+        in2EdgeLatch = false;
         if (userConfig.Config.arpMode == 0)
             userConfig.Config.arpStep = 0;
         else if (userConfig.Config.arpMode == 1)
@@ -499,17 +499,17 @@ void calibration(float &vref, float &noiseFloor)
 
 void edgeCallback(uint gpio, uint32_t events)
 {
-    if (gpio == IN1)
+    if (gpio == IN2)
     {
         if (events & GPIO_IRQ_EDGE_RISE)
         {
             gateEdge.updateEdge(1);
-            in1EdgeLatch = true;
+            in2EdgeLatch = true;
         }
         else if (events & GPIO_IRQ_EDGE_FALL)
         {
             gateEdge.updateEdge(0);
-            in1EdgeLatch = false;
+            in2EdgeLatch = false;
         }
     }
 }
@@ -555,7 +555,7 @@ void setup()
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
     in1.init(IN1);
-    in2.init(IN2);
+    // in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
@@ -604,7 +604,8 @@ void setup()
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
 
-    gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
+    gpio_init(IN2);
+    gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_callback(edgeCallback);
     irq_set_enabled(IO_IRQ_BANK0, true);
 

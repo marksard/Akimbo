@@ -76,7 +76,7 @@ enum ButtonCondition
 static uint interruptSliceNum;
 static RotaryEncoder enc;
 static Button buttons[3];
-static SmoothAnalogRead in1;
+// static SmoothAnalogRead in1;
 static SmoothAnalogRead cvIn;
 static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
@@ -87,7 +87,7 @@ static ValueLock potLock;
 
 // gpio割り込み
 static volatile bool in1EdgeLatch = false;
-static volatile bool in2EdgeLatch = false;
+// static volatile bool in2EdgeLatch = false;
 static EdgeChecker clockEdge;
 
 // UIほか
@@ -379,17 +379,17 @@ void edgeCallback(uint gpio, uint32_t events)
             in1EdgeLatch = false;
         }
     }
-    else if (gpio == IN2)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            in2EdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            in2EdgeLatch = false;
-        }
-    }
+    // else if (gpio == IN2)
+    // {
+    //     if (events & GPIO_IRQ_EDGE_RISE)
+    //     {
+    //         in2EdgeLatch = true;
+    //     }
+    //     else if (events & GPIO_IRQ_EDGE_FALL)
+    //     {
+    //         in2EdgeLatch = false;
+    //     }
+    // }
 }
 
 void interruptPWM()
@@ -444,8 +444,9 @@ void setup()
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
 
+    gpio_init(IN1);
     gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
+    // gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_callback(edgeCallback);
     irq_set_enabled(IO_IRQ_BANK0, true);
 
