@@ -150,8 +150,8 @@ public:
     void setCheapMode(bool mode) { _cheapMode = mode; }
     bool getCheapMode() { return _cheapMode; }
 
-    int8_t kickFreq = 12;
-    int8_t kickPatamA = 2;
+    int8_t kickFreq = 16;
+    int8_t kickPatamA = 4;
     void addKickParamA(int8_t value)
     {
         if (value == 0)
