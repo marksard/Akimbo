@@ -530,6 +530,7 @@ void setup()
     // }
     // delay(500);
 
+    set_sys_clock_hz(CPU_CLOCK, true);
     pinMode(23, OUTPUT);
     gpio_put(23, HIGH);
 
