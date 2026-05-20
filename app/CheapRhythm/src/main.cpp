@@ -29,9 +29,6 @@
 #include "lib/MiniOsc.hpp"
 #include "CheapRhythm88.hpp"
 
-#undef SAMPLE_FREQ
-#define SAMPLE_FREQ ((CPU_CLOCK / INTR_PWM_RESO) / 8) // 48,828.125khz
-
 enum Mode
 {
     MONITOR,

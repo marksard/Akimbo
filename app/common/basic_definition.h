@@ -17,4 +17,4 @@
 // #define DAC_MAX_MILLVOLT 5000 // mV
 #define DAC_BIT 12
 #define DAC_RESO 4096
-#define SAMPLE_FREQ ((CPU_CLOCK / INTR_PWM_RESO) / 4.0)
+#define SAMPLE_FREQ (((float)(CPU_CLOCK) / (float)INTR_PWM_RESO) / (float)SAMPLE_FREQ_DIVIDER)
