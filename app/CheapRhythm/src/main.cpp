@@ -30,7 +30,7 @@
 #include "CheapRhythm88.hpp"
 
 #undef SAMPLE_FREQ
-#define SAMPLE_FREQ ((CPU_CLOCK / INTR_PWM_RESO) / 8) // 32470.703125khz
+#define SAMPLE_FREQ ((CPU_CLOCK / INTR_PWM_RESO) / 8) // 48,828.125khz
 
 enum Mode
 {
@@ -82,7 +82,7 @@ static Mode mode = Mode::MONITOR;
 static RGBLEDPWMControl::MenuColor menuColor = RGBLEDPWMControl::MenuColor::RED;
 
 CheapRhythm88 cr88;
-const float adcTypeRatio = 60.0 / 4096.0;
+const float adcTypeRatio = (double)CheapRhythm88::Type::DRUM_TYPE_MAX / ADC_RESO;
 MiniOsc lfo;
 
 //////////////////////////////////////////
@@ -195,7 +195,8 @@ void setup()
     // }
     // delay(500);
 
-    analogReadResolution(ADC_BIT);
+    // analogReadResolution(ADC_BIT);
+    set_sys_clock_hz(CPU_CLOCK, true);
     pinMode(23, OUTPUT);
     gpio_put(23, HIGH);
 
@@ -250,8 +251,9 @@ void loop()
         edgeCV = cvInValue;
 
         uint8_t drumtype = in2Value * adcTypeRatio;
-        edgePitch = (drumtype % 3) * 32;
-        drum = (CheapRhythm88::Type)(drumtype / 3 % 4);
+        int16_t pitch = (drumtype - (int)drumtype) * 100;
+        edgePitch = pitch;
+        drum = (CheapRhythm88::Type)(drumtype);
     }
     cr88.update(drum, edgePitch, edgeCV, gateEdge.getValue());
 

@@ -52,6 +52,7 @@ public:
         svfSnare.setParameter(0.05, 0.07);
         svfHiHat.init(_resolution, signedOut);
         svfHiHat.setParameter(0.6, 0.90);
+        addSnareParamA(-1);
     }
 
     inline float calcFrequencyModulation(int16_t base, int16_t adder, float mod)
@@ -88,15 +89,15 @@ public:
             updatePitchDecay(0.6);
             _osc.setFrequency(calcFrequencyModulation(300, pitchMod >> 3, _cheapMode ? 0 : (_pitchEnvValue / 4096.0)));
             _osc.setWave(MiniOsc::TRI);
-            _osc.setLevel(_resoBit);
-            _osc2.setLevel(_resoBit - 2);
+            _osc.setLevel(_resoBit - 1);
+            _osc2.setLevel(_resoBit - 1);
             break;
         case DRUM_HIHAT:
             updateDecay(decayMod, 0);
             _osc.setFrequency(4000 + pitchMod);
             _osc.setWave(MiniOsc::SAW);
-            _osc.setLevel(_resoBit - 2);
-            _osc2.setLevel(_resoBit - 3);
+            _osc.setLevel(_resoBit - 3);
+            _osc2.setLevel(_resoBit - 2);
             break;
         case DRUM_TOM:
             updateDecay(decayMod, 1);
@@ -159,7 +160,7 @@ public:
         kickFreq = 8 + (kickPatamA * 2);
     }
 
-    int8_t snarePatamA = 5;
+    int8_t snarePatamA = 2;
     void addSnareParamA(int8_t value)
     {
         if (value == 0)
