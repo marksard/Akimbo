@@ -49,13 +49,13 @@ enum ButtonCondition
     // L: holded (leaved)
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
-    UA = 0x0200,
-    UB = 0x0020,
-    URE = 0x0002,
+    DA = 0x0100,
+    DB = 0x0010,
+    DRE = 0x0001,
     HA = 0x0300,
     HB = 0x0030,
-    HA_UB = 0x0320,
-    HA_RE = 0x0302,
+    HA_DB = 0x0310,
+    HA_RE = 0x0301,
 };
 
 // 標準インターフェース
@@ -281,15 +281,15 @@ void loop1()
     uint16_t buttonStates = (btnA << 8) + (btnB << 4) + btnRE;
     int16_t potValue = pot.getValue();
 
-    if (buttonStates == ButtonCondition::URE)
+    if (buttonStates == ButtonCondition::DRE)
     {
         changeMode(1);
     }
-    else if (buttonStates == ButtonCondition::UA)
+    else if (buttonStates == ButtonCondition::DA)
     {
         cr88.setCheapMode(cr88.getCheapMode() ? false : true);
     }
-    else if (buttonStates == ButtonCondition::UB)
+    else if (buttonStates == ButtonCondition::DB)
     {
         lfo.setWave((MiniOsc::Wave)constrainCyclic((int8_t)(lfo.getWave() + 1), (int8_t)MiniOsc::Wave::SQU, (int8_t)MiniOsc::Wave::MAX));
     }

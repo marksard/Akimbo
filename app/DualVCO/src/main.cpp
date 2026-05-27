@@ -62,13 +62,13 @@ enum ButtonCondition
     // L: holded (leaved)
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
-    UA = 0x0200,
-    UB = 0x0020,
-    URE = 0x0002,
+    DA = 0x0100,
+    DB = 0x0010,
+    DRE = 0x0001,
     HA = 0x0300,
     HB = 0x0030,
-    HA_UB = 0x0320,
-    HA_RE = 0x0302,
+    HA_DB = 0x0310,
+    HA_RE = 0x0301,
 };
 
 // 標準インターフェース
@@ -290,15 +290,15 @@ void processVCO(int16_t in1Value, int16_t in2Value, int16_t cvInValue, int16_t p
 void operationVCO(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 {
     int8_t index = oscSelect;
-    if (buttonStates == ButtonCondition::UA)
+    if (buttonStates == ButtonCondition::DA)
     {
         changeMenu(-1);
     }
-    else if (buttonStates == ButtonCondition::UB)
+    else if (buttonStates == ButtonCondition::DB)
     {
         changeMenu(1);
     }
-    else if (buttonStates == ButtonCondition::URE)
+    else if (buttonStates == ButtonCondition::DRE)
     {
         toggleOsc();
     }
@@ -309,7 +309,7 @@ void operationVCO(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     else if (buttonStates == ButtonCondition::HB)
     {
     }
-    else if (buttonStates == ButtonCondition::HA_UB)
+    else if (buttonStates == ButtonCondition::HA_DB)
     {
         userConfig.saveUserConfig();
     }
@@ -430,13 +430,13 @@ void processSetup(int16_t in1Value, int16_t in2Value, int16_t cvInValue, int16_t
 void operationSetup(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 {
     int8_t index = oscSelect;
-    if (buttonStates == ButtonCondition::UA)
+    if (buttonStates == ButtonCondition::DA)
     {
     }
-    else if (buttonStates == ButtonCondition::UB)
+    else if (buttonStates == ButtonCondition::DB)
     {
     }
-    else if (buttonStates == ButtonCondition::URE)
+    else if (buttonStates == ButtonCondition::DRE)
     {
         toggleOsc();
     }
@@ -446,7 +446,7 @@ void operationSetup(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     else if (buttonStates == ButtonCondition::HB)
     {
     }
-    else if (buttonStates == ButtonCondition::HA_UB)
+    else if (buttonStates == ButtonCondition::HA_DB)
     {
         userConfig.saveUserConfig();
     }

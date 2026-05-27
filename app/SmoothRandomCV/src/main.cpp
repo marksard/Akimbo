@@ -63,13 +63,13 @@ enum ButtonCondition
     // L: holded (leaved)
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
-    UA = 0x0200,
-    UB = 0x0020,
-    URE = 0x0002,
+    DA = 0x0100,
+    DB = 0x0010,
+    DRE = 0x0001,
     HA = 0x0300,
     HB = 0x0030,
-    HA_UB = 0x0320,
-    HA_RE = 0x0302,
+    HA_DB = 0x0310,
+    HA_RE = 0x0301,
 };
 
 // 標準インターフェース
@@ -273,7 +273,7 @@ void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t i
 void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 {
     int8_t index = channelSelect;
-    if (buttonStates == ButtonCondition::UA)
+    if (buttonStates == ButtonCondition::DA)
     {
         if (settingMenu == SettingMenu::SEL_TAP_TEMPO)
         {
@@ -282,11 +282,11 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
         }
         changeMenu(-1);
     }
-    else if (buttonStates == ButtonCondition::UB)
+    else if (buttonStates == ButtonCondition::DB)
     {
         changeMenu(1);
     }
-    else if (buttonStates == ButtonCondition::URE)
+    else if (buttonStates == ButtonCondition::DRE)
     {
         toggleChannel();
     }
@@ -296,7 +296,7 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     else if (buttonStates == ButtonCondition::HB)
     {
     }
-    else if (buttonStates == ButtonCondition::HA_UB)
+    else if (buttonStates == ButtonCondition::HA_DB)
     {
         userConfig.saveUserConfig();
     }

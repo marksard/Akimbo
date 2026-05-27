@@ -68,13 +68,13 @@ enum ButtonCondition
     // L: holded (leaved)
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
-    UA = 0x0200,
-    UB = 0x0020,
-    URE = 0x0002,
+    DA = 0x0100,
+    DB = 0x0010,
+    DRE = 0x0001,
     HA = 0x0300,
     HB = 0x0030,
-    HA_UB = 0x0320,
-    HA_RE = 0x0302,
+    HA_DB = 0x0310,
+    HA_RE = 0x0301,
 };
 
 // 標準インターフェース
@@ -198,15 +198,15 @@ void changeSelectBank(int encValue)
 
 void operationParameter(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 {
-    if (buttonStates == ButtonCondition::UA)
+    if (buttonStates == ButtonCondition::DA)
     {
         changeSelectBank(-1);
     }
-    else if (buttonStates == ButtonCondition::UB)
+    else if (buttonStates == ButtonCondition::DB)
     {
         changeSelectBank(1);
     }
-    else if (buttonStates == ButtonCondition::URE)
+    else if (buttonStates == ButtonCondition::DRE)
     {
         changeSelectParam(1);
     }
@@ -216,7 +216,7 @@ void operationParameter(uint16_t buttonStates, int8_t encValue, int16_t potValue
     else if (buttonStates == ButtonCondition::HB)
     {
     }
-    else if (buttonStates == ButtonCondition::HA_UB)
+    else if (buttonStates == ButtonCondition::HA_DB)
     {
         userConfig.saveUserConfig();
     }
@@ -396,7 +396,7 @@ void loop()
     int16_t potValue = pot.analogReadDirectFast();
     bool cvHigh = cvInValue > (ADC_RESO >> 2);
 
-    agc.update(0.4);
+    agc.update(0.8);
 
     pKit[0][userConfig.Config.selectWave[0]]->play(in2EdgeLatch);
     pKit[1][userConfig.Config.selectWave[1]]->play(in1EdgeLatch);
