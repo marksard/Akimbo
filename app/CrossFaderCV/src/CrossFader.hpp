@@ -9,8 +9,9 @@
 #include <math.h>
 #include <stdint.h>
 
-// クロスフェーダーCV出力計算クラス
-// 入力12bit、出力は0~5Vの11bitで計算し、最終bias加算して出力
+// Equal PowerタイプクロスフェーダーCV出力計算クラス
+// 入力範囲は12bit、出力範囲はAkimbo 12bit DACの仕様±5Vの上半分（0~5V）
+// の11bit量で計算し、オフセットして出力
 class CrossFader
 {
 public:
