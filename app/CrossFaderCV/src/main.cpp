@@ -6,8 +6,12 @@
  */
 
 /*
+# CrossFaderCV
+
 CrossFaderCVは、Equal PowerタイプのクロスフェーダCVを出力するファームウェアです。  
 実際にクロスフェードさせるには別途リニアVCAが二基必要です。  
+
+## 機能概要
 
 - 入力
   - `POT` パンの位置

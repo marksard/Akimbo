@@ -1,6 +1,6 @@
 /*!
  * SmoothRandomCV class
- * Copyright 2024 marksard
+ * Copyright 2025 marksard
  * This software is released under the MIT license.
  * see https://opensource.org/licenses/MIT
  */
