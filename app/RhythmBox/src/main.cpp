@@ -89,10 +89,6 @@ static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
 static Mcp4922SwSpi dac;
 
-// gpio割り込み
-static volatile bool in1EdgeLatch = false;
-static volatile bool in2EdgeLatch = false;
-
 // UIほか
 #define OSC_MENU_MAX 4
 static SoundParam selectParam = SoundParam::WAVE;
@@ -283,32 +279,6 @@ void operationParameter(uint16_t buttonStates, int8_t encValue, int16_t potValue
 
 //////////////////////////////////////////
 
-void edgeCallback(uint gpio, uint32_t events)
-{
-    if (gpio == IN1)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            in1EdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            in1EdgeLatch = false;
-        }
-    }
-    if (gpio == IN2)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            in2EdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            in2EdgeLatch = false;
-        }
-    }
-}
-
 void interruptPWM()
 {
     pwm_clear_irq(interruptSliceNum);
@@ -345,6 +315,9 @@ void setup()
     pinMode(23, OUTPUT);
     gpio_put(23, HIGH);
 
+    pinMode(IN1, INPUT);
+    pinMode(IN2, INPUT);
+
     enc.init(EC1B, EC1A, true);
     buttons[0].init(BTN_A);
     buttons[0].setHoldTime(350);
@@ -358,7 +331,7 @@ void setup()
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
     // gain最大値の設定は全部同時に鳴ることはほぼないため大きめにしている
-    agc.init(DAC_RESO, SOUND_BANK_COUNT, 0.96);
+    agc.init(DAC_RESO, SOUND_BANK_COUNT, 0.93);
 
     rgbLedControl.init(4000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(menuColor);
@@ -380,13 +353,6 @@ void setup()
     }
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
-    gpio_init(IN1);
-    gpio_init(IN2);
-    gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_callback(edgeCallback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 void loop()
@@ -396,10 +362,10 @@ void loop()
     int16_t potValue = pot.analogReadDirectFast();
     bool cvHigh = cvInValue > (ADC_RESO >> 2);
 
-    agc.update(0.4);
+    agc.update(0.3);
 
-    pKit[0][userConfig.Config.selectWave[0]]->play(in2EdgeLatch);
-    pKit[1][userConfig.Config.selectWave[1]]->play(in1EdgeLatch);
+    pKit[0][userConfig.Config.selectWave[0]]->play(gpio_get(IN2));
+    pKit[1][userConfig.Config.selectWave[1]]->play(gpio_get(IN1));
     pKit[2][userConfig.Config.selectWave[2]]->play(cvHigh);
     pKit[0][userConfig.Config.selectWave[0]]->updateDecay(userConfig.Config.decay[0]);
     pKit[1][userConfig.Config.selectWave[1]]->updateDecay(userConfig.Config.decay[1]);
