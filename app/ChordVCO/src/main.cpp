@@ -56,11 +56,12 @@ enum CVInSelect
 enum ButtonCondition
 {
     // 各ボタンの押下状態と各ボタンの組み合わせ
-    // Button State: 0:None 1:Button down 2:Button up 3:Holding 4:Holded
+    // Button State: 0:None 1:Button down 2:Button up 3:Holding 4:Holded B:Hold edge (Holding | 0x08)
     // U: button up
     // D: button down
     // H: holging
     // L: holded (leaved)
+    // E: hold edge
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
     UA = 0x0200,
@@ -398,7 +399,7 @@ void operationVCO(uint16_t buttonStates, int8_t encValue, int16_t potValue)
             break;
         case OscillatorSettingMenu::SEL_WAVE:
             int16_t morph = potValue - (ADC_RESO >> 1);
-            morph = morph > 36 || morph < -36 ? morph : 0; // 不感レンジ
+            morph = morph > 48 || morph < -48 ? morph : 0; // 不感レンジ
             userConfig.Config.morphPot = morph;
             break;
         }
@@ -576,7 +577,6 @@ void setup()
     {
         osc[i].init(SAMPLE_FREQ, DAC_BIT);
         osc[i].setWave(userConfig.Config.wave);
-        osc[i].startFolding(true);
     }
 
     // VOCT Calibration

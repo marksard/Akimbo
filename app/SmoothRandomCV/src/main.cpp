@@ -56,11 +56,12 @@ enum WaveStyle
 enum ButtonCondition
 {
     // 各ボタンの押下状態と各ボタンの組み合わせ
-    // Button State: 0:None 1:Button down 2:Button up 3:Holding 4:Holded
+    // Button State: 0:None 1:Button down 2:Button up 3:Holding 4:Holded B:Hold edge (Holding | 0x08)
     // U: button up
     // D: button down
     // H: holging
     // L: holded (leaved)
+    // E: hold edge
     // 0xMABR (Mode, A, B, RE(RotaryEncoder) button)
     NONE = 0x0000,
     UA = 0x0200,
