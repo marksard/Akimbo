@@ -18,155 +18,155 @@ public:
 
     void init(float samplingFreq)
     {
-        current_v = 0.0f;
-        is_rising = false;
-        last_gate = false;
-        eoc_pulse = false;
-        is_active = false;
-        rise_time_sec = 0.005f;
-        fall_time_sec = 0.01f;
-        internal_shape = 0.0f;
-        eoc_duration_samples = 10;
-        eoc_counter = 0;
+        currentV = 0.0f;
+        isRising = false;
+        lastGate = false;
+        eocPulse = false;
+        isActive = false;
+        riseTimeSec = 0.0f;
+        fallTimeSec = 0.1f;
+        internalShape = 0.0f;
+        eocDurationSamples = 10;
+        eocCounter = 0;
         if (samplingFreq > 0.0f)
         {
-            sample_rate = samplingFreq;
+            sampleRate = samplingFreq;
             updateSteps();
             setEocWidth(0.001f); // 1ms
         }
     }
 
-    void setEocWidth(float width_sec)
+    void setEocWidth(float widthSec)
     {
-        if (width_sec < 0.0f)
-            width_sec = 0.001f;
+        if (widthSec < 0.0f)
+            widthSec = 0.001f;
 
-        eoc_duration_samples = (uint32_t)(width_sec * sample_rate);
-        if (eoc_duration_samples == 0)
-            eoc_duration_samples = 10;
+        eocDurationSamples = (uint32_t)(widthSec * sampleRate);
+        if (eocDurationSamples == 0)
+            eocDurationSamples = 10;
     }
 
-    inline void update(float rise_time, float fall_time, float shape)
+    inline void update(float riseTime, float fallTime, float shape)
     {
         // ~300秒に設定（伸ばせると思う）
-        rise_time_sec = constrain(rise_time, 0.00, 300.0);
-        fall_time_sec = constrain(fall_time, 0.00, 300.0);
+        riseTimeSec = constrain(riseTime, 0.0, 300.0);
+        fallTimeSec = constrain(fallTime, 0.0, 300.0);
 
         if (shape > 1.0f)
             shape = 1.0f;
         if (shape < -1.0f)
             shape = -1.0f;
 
-        internal_shape = -shape;
+        internalShape = -shape;
         updateSteps();
     }
 
     inline float process(bool gate)
     {
         // Trigger style EOC
-        // if (eoc_counter > 0)
+        // if (eocCounter > 0)
         // {
-        //     eoc_counter--;
-        //     if (eoc_counter == 0)
+        //     eocCounter--;
+        //     if (eocCounter == 0)
         //     {
-        //         eoc_pulse = false; // 指定サンプル数経過したらパルスOFF
+        //         eocPulse = false; // 指定サンプル数経過したらパルスOFF
         //     }
         // }
 
         // トリガー検出（ゲートの立ち上がり）
-        bool trigger = gate && !last_gate;
-        last_gate = gate;
+        bool trigger = gate && !lastGate;
+        lastGate = gate;
 
         // セルフサイクルの処理（動作中でなく、かつCycle有効ならトリガー）
-        if (cycle && !is_active && current_v <= 0.0001f)
+        if (cycle && !isActive && currentV <= 0.0001f)
         {
             trigger = true;
         }
 
         // トリガーが入ったらRise（上昇）を開始
-        if (trigger && !is_rising)
+        if (trigger && !isRising)
         {
-            is_rising = true;
-            is_active = true;
+            isRising = true;
+            isActive = true;
         }
 
         // --- 充放電の計算 ---
-        if (is_active)
+        if (isActive)
         {
-            if (is_rising)
+            if (isRising)
             {
-                eoc_pulse = false; // Gate style EOC
+                eocPulse = false; // Gate style EOC
 
-                float scale = (1.0f - internal_shape) * (1.0f - current_v) + (internal_shape + 1.0f) * current_v;
+                float scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
 
                 if (scale < 0.01f)
                     scale = 0.01f;
 
-                current_v += rise_step_inv * scale;
+                currentV += riseStepInv * scale;
 
-                if (current_v >= 1.0f)
+                if (currentV >= 1.0f)
                 {
-                    current_v = 1.0f;
-                    is_rising = false;
+                    currentV = 1.0f;
+                    isRising = false;
                 }
             }
             else
             {
                 // 下降の計算
-                float inv_v = 1.0f - current_v;
-                float scale = (1.0f - internal_shape) * (1.0f - inv_v) + (internal_shape + 1.0f) * inv_v;
+                float invV = 1.0f - currentV;
+                float scale = (1.0f - internalShape) * (1.0f - invV) + (internalShape + 1.0f) * invV;
 
                 if (scale < 0.01f)
                     scale = 0.01f;
 
-                current_v -= fall_step_inv * scale;
+                currentV -= fallStepInv * scale;
 
                 // 終了
-                if (current_v <= 0.0f)
+                if (currentV <= 0.0f)
                 {
-                    current_v = 0.0f;
-                    is_active = false;
+                    currentV = 0.0f;
+                    isActive = false;
 
-                    eoc_pulse = true;
-                    eoc_counter = eoc_duration_samples;
+                    eocPulse = true;
+                    eocCounter = eocDurationSamples;
                 }
             }
         }
 
-        return current_v;
+        return currentV;
     }
 
-    // inline bool isRising() const { return is_rising; }
-    inline float getValue() const { return current_v; }
-    inline bool getEOC() const { return eoc_pulse; }
+    // inline bool getIsRising() const { return isRising; }
+    inline float getValue() const { return currentV; }
+    inline bool getEOC() const { return eocPulse; }
     inline void toggleCycle() { cycle = !cycle; }
 
 private:
-    float sample_rate;
-    float current_v; // 現在の出力電圧状態 (0.0f ～ 1.0f)
-    bool is_rising;
-    bool last_gate;
-    bool eoc_pulse;
-    bool is_active;
+    float sampleRate;
+    float currentV; // 現在の出力電圧状態 (0.0f ～ 1.0f)
+    bool isRising;
+    bool lastGate;
+    bool eocPulse;
+    bool isActive;
     bool cycle;
 
     // --- 事前計算（キャッシュ）用メンバ変数 ---
-    float rise_time_sec;  // 現在設定されている上昇時間（秒）
-    float fall_time_sec;  // 現在設定されている下降時間（秒）
-    float rise_step_inv;  // 上昇時の基本ステップ幅（逆数キャッシュ）
-    float fall_step_inv;  // 下降時の基本ステップ幅（逆数キャッシュ）
-    float internal_shape; // 符号反転済みの形状パラメータ
+    float riseTimeSec;   // 現在設定されている上昇時間（秒）
+    float fallTimeSec;   // 現在設定されている下降時間（秒）
+    float riseStepInv;   // 上昇時の基本ステップ幅（逆数キャッシュ）
+    float fallStepInv;   // 下降時の基本ステップ幅（逆数キャッシュ）
+    float internalShape; // 符号反転済みの形状パラメータ
 
-    uint32_t eoc_duration_samples;
-    uint32_t eoc_counter;
+    uint32_t eocDurationSamples;
+    uint32_t eocCounter;
 
     // ステップ幅とパルス幅の再計算
     void updateSteps()
     {
-        float r = (rise_time_sec < 0.0001f) ? 0.0001f : rise_time_sec;
-        float f = (fall_time_sec < 0.0001f) ? 0.0001f : fall_time_sec;
+        float r = (riseTimeSec < 0.0001f) ? 0.0001f : riseTimeSec;
+        float f = (fallTimeSec < 0.0001f) ? 0.0001f : fallTimeSec;
 
-        rise_step_inv = 1.0f / (r * sample_rate);
-        fall_step_inv = 1.0f / (f * sample_rate);
+        riseStepInv = 1.0f / (r * sampleRate);
+        fallStepInv = 1.0f / (f * sampleRate);
     }
 };

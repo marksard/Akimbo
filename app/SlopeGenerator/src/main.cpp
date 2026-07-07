@@ -57,6 +57,7 @@ enum ButtonCondition
 static uint interruptSliceNum;
 static RotaryEncoder enc;
 static Button buttons[3];
+// static SmoothAnalogRead in2;
 static SmoothAnalogRead cvIn;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
@@ -79,8 +80,8 @@ static const uint16_t bias = DAC_RESO >> 1;
 static const float timeRatio = 10.0f / ADC_RESO;
 static const float riseFallStep = 0.005f;
 static const float adcScaleRatio = 2.0f / ADC_RESO;
-static float rise = riseFallStep;
-static float fall = riseFallStep * 2;
+static float rise = 0;
+static float fall = riseFallStep * 20;
 
 //////////////////////////////////////////
 
@@ -213,7 +214,6 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    // in1.init(IN1);
     // in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
@@ -240,6 +240,7 @@ void setup()
 void loop()
 {
     int8_t encValue = enc.getDirection(true);
+    // int16_t in2Value = in2.analogReadDirectFast();
     int16_t cvInValue = cvIn.analogReadDirectFast() - (ADC_RESO >> 1);
     int16_t potValue = pot.analogReadDirectFast();
 
