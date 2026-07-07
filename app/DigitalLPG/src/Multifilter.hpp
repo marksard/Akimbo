@@ -7,28 +7,27 @@
 #pragma once
 #include <Arduino.h>
 
-// --------------------------------------------------------------------------------
-// MultiFilter
-// --------------------------------------------------------------------------------
 class MultiFilter
 {
 private:
 	// フィルタの係数
-	float a0, a1, a2, b0, b1, b2;
+	float a1, a2, b0, b1, b2;
+	float a0_inv; // a0の逆数を事前計算して保持する
+	
+	// 事前計算用の定数
+	float two_pi_div_sr; // 2 * PI / samplingRate を保持する変数
+
 	// バッファ
 	float out1, out2;
 	float in1, in2;
-	float samplingRate;
 
 public:
-	// --------------------------------------------------------------------------------
-	// コンストラクタ
-	// --------------------------------------------------------------------------------
-	MultiFilter(float samplingRate = 44100.0)
+	MultiFilter(float samplingRate = 44100.0f)
 	{
-		this->samplingRate = samplingRate;
+		two_pi_div_sr = 2.0f * 3.14159265f / samplingRate;
+		
 		// メンバー変数を初期化
-		a0 = 1.0f; // 0以外にしておかないと除算でエラーになる
+		a0_inv = 1.0f; 
 		a1 = 0.0f;
 		a2 = 0.0f;
 		b0 = 1.0f;
@@ -42,42 +41,37 @@ public:
 		out2 = 0.0f;
 	}
 
-	// --------------------------------------------------------------------------------
-	// 入力信号にフィルタを適用する関数
-	// --------------------------------------------------------------------------------
-	float Process(float in)
+	inline float Process(float in)
 	{
-		// 入力信号にフィルタを適用し、出力信号変数に保存。
-		// float out = b0 / a0 * in + b1 / a0 * in1 + b2 / a0 * in2
-		// 	- a1 / a0 * out1 - a2 / a0 * out2;
-		float a0_inv = 1.0 / a0;
 		float out = (b0 * in + b1 * in1 + b2 * in2 - a1 * out1 - a2 * out2) * a0_inv;
 
-		in2 = in1; // 2つ前の入力信号を更新
-		in1 = in;  // 1つ前の入力信号を更新
+		in2 = in1;
+		in1 = in;
 
-		out2 = out1; // 2つ前の出力信号を更新
-		out1 = out;	 // 1つ前の出力信号を更新
+		out2 = out1;
+		out1 = out;
 
-		// 出力信号を返す
 		return out;
 	}
 
-	// --------------------------------------------------------------------------------
-	// フィルタ係数を計算するメンバー関数
-	// --------------------------------------------------------------------------------
 	void LowPass(float freq, float q)
 	{
-		// フィルタ係数計算で使用する中間値を求める。
-		float omega = 2.0f * 3.14159265f * freq / samplingRate;
-		float alpha = sin(omega) / (2.0f * q);
+		float omega = freq * two_pi_div_sr;
+		
+		float sin_omega = sinf(omega);
+		float cos_omega = cosf(omega);
+		
+		float alpha = sin_omega / (2.0f * q);
 
-		// フィルタ係数を求める。
-		a0 = 1.0f + alpha;
-		a1 = -2.0f * cos(omega);
+		float a0 = 1.0f + alpha;
+		a0_inv = 1.0f / a0;
+
+		a1 = -2.0f * cos_omega;
 		a2 = 1.0f - alpha;
-		b0 = (1.0f - cos(omega)) / 2.0f;
-		b1 = 1.0f - cos(omega);
-		b2 = (1.0f - cos(omega)) / 2.0f;
+		
+		float b_common = (1.0f - cos_omega) * 0.5f;
+		b0 = b_common;
+		b1 = 1.0f - cos_omega;
+		b2 = b_common;
 	}
 };

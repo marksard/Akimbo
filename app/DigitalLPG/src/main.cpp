@@ -25,7 +25,6 @@
 #include "SystemConfig.hpp"
 #include "Helper.h"
 
-#include "lib/ActiveGainControl.hpp"
 #include "Multifilter.hpp"
 
 #undef SAMPLE_FREQ
@@ -38,17 +37,7 @@ enum SettingMenu
     SEL_CV_VCA,
     SEL_CV_LPG_CLOSING,
     SEL_MAX = SEL_CV_LPG_CLOSING,
-    // SEL_CV_FILTER_TYPE,
-    // SEL_MAX = SEL_CV_FILTER_TYPE,
 };
-
-// enum FilterType
-// {
-//     FILTER_LP = 0,
-//     FILTER_BP,
-//     FILTER_HP,
-//     FILTER_MAX = FILTER_HP,
-// };
 
 enum ButtonCondition
 {
@@ -82,10 +71,6 @@ static ADCErrorCorrection adcErrorCorrection;
 static Mcp4922SwSpi dac;
 static ValueLock potLock;
 
-// gpio割り込み
-// static volatile bool in1EdgeLatch = false;
-// static volatile bool in2EdgeLatch = false;
-
 // UIほか
 static SettingMenu settingMenu = SettingMenu::SEL_RESO;
 static RGBLEDPWMControl::MenuColor oscColor = RGBLEDPWMControl::MenuColor::BLACK;
@@ -93,7 +78,6 @@ static EEPROMConfigIO<SystemConfig> systemConfig(0);
 
 // 機能
 static int16_t bias = DAC_RESO >> 1;
-// static ActiveGainControl agc;
 static MultiFilter filter(SAMPLE_FREQ);
 #define LPG_LIKE_RELEASES_NUM 6
 const float lpgClosingRatios[LPG_LIKE_RELEASES_NUM] = {
@@ -120,9 +104,8 @@ struct UserConfig
         resonance = 1;
         modFreq = 1.0;
         modAmp = 1.0;
-        lpgClosing = 0;
+        lpgClosing = 2;
         lpgMode = true;
-        // filterType = FILTER_LP;
     }
 };
 static EEPROMConfigIO<UserConfig> userConfig(64); // systemConfigから64バイト開けておく
@@ -149,9 +132,6 @@ void updateMenuColor()
     case SettingMenu::SEL_CV_LPG_CLOSING:
         rgbLedControl.setFreq(6);
         break;
-    // case SettingMenu::SEL_CV_FILTER_TYPE:
-    //     rgbLedControl.setFreq(8);
-    //     break;
     default:
         break;
     }
@@ -209,43 +189,7 @@ void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t i
 
     int16_t freq = constrain(userConfig.Config.frequency + (conv2ExpScaled(smoothIn1Value, 16000) * userConfig.Config.modFreq), 10, 16000);
 
-    // switch (userConfig.Config.filterType)
-    // {
-    // case FilterType::FILTER_LP:
-    //     filter.LowPass((float)freq, userConfig.Config.resonance, SAMPLE_FREQ);
-    //     break;
-    // case FilterType::FILTER_BP:
-    //     filter.BandPass((float)freq, userConfig.Config.resonance, SAMPLE_FREQ);
-    //     break;
-    // case FilterType::FILTER_HP:
-    //     filter.HighPass((float)freq, userConfig.Config.resonance, SAMPLE_FREQ);
-    //     break;
-    // }
     filter.LowPass((float)freq, userConfig.Config.resonance);
-
-    // static int16_t sampleFreq = getSamplingFrequency();
-    // static int16_t cnt = 0;
-    // if (++cnt > 1000)
-    // {
-    //     cnt = 0;
-    //     // Serial.print("SampleFreq:");
-    //     // Serial.println(sampleFreq);
-    //     Serial.print(" modF:");
-    //     Serial.print(userConfig.Config.modFreq, 3);
-    //     Serial.print(" modA:");
-    //     Serial.print(userConfig.Config.modAmp, 3);
-    //     Serial.print(" lpgMode:");
-    //     Serial.print(userConfig.Config.lpgMode);
-    //     Serial.print(" lazyRel:");
-    //     Serial.print(userConfig.Config.lpgClosing);
-    //     Serial.print(" f:");
-    //     Serial.print(freq);
-    //     Serial.print(" q:");
-    //     Serial.print(userConfig.Config.resonance, 3);
-    //     Serial.print(" val:");
-    //     Serial.print(currentWaveValue);
-    //     Serial.println();
-    // }
 }
 
 void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
@@ -295,10 +239,6 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
             userConfig.Config.lpgClosing = constrain(userConfig.Config.lpgClosing + encValue, 0, LPG_LIKE_RELEASES_NUM - 1);
             rgbLedControl.setRainbowLevel(userConfig.Config.lpgClosing, 0, LPG_LIKE_RELEASES_NUM - 1);
             break;
-        // case SettingMenu::SEL_CV_FILTER_TYPE:
-        //     userConfig.Config.filterType = (FilterType)constrain((int8_t)userConfig.Config.filterType + encValue, (int8_t)FilterType::FILTER_LP, (int8_t)FilterType::FILTER_MAX);
-        //     rgbLedControl.setRainbowLevel(userConfig.Config.filterType, (int8_t)FilterType::FILTER_LP, (int8_t)FilterType::FILTER_MAX);
-        //     break;
         default:
             break;
         }
@@ -308,32 +248,6 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 }
 
 //////////////////////////////////////////
-
-// void edgeCallback(uint gpio, uint32_t events)
-// {
-//     if (gpio == IN1)
-//     {
-//         if (events & GPIO_IRQ_EDGE_RISE)
-//         {
-//             in1EdgeLatch = true;
-//         }
-//         else if (events & GPIO_IRQ_EDGE_FALL)
-//         {
-//             in1EdgeLatch = false;
-//         }
-//     }
-//     else if (gpio == IN2)
-//     {
-//         if (events & GPIO_IRQ_EDGE_RISE)
-//         {
-//             in2EdgeLatch = true;
-//         }
-//         else if (events & GPIO_IRQ_EDGE_FALL)
-//         {
-//             in2EdgeLatch = false;
-//         }
-//     }
-// }
 
 void interruptPWM()
 {
@@ -388,15 +302,8 @@ void setup()
     adcErrorCorrection.init(systemConfig.Config.vRef, systemConfig.Config.noiseFloor);
 
     // filter.LowPass((float)userConfig.Config.frequency, (float)userConfig.Config.resonance, SAMPLE_FREQ);
-    // filter.HighPass((float)userConfig.Config.frequency, (float)userConfig.Config.resonance, SAMPLE_FREQ);
-    // filter.BandPass((float)userConfig.Config.frequency, (float)userConfig.Config.resonance, SAMPLE_FREQ);
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
-    // gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    // gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    // gpio_set_irq_callback(edgeCallback);
-    // irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 void loop()
@@ -409,10 +316,8 @@ void loop()
 
     processEnv(cvInValue, potValue, in1Value, in2Value);
 
-    // agc.update(2);
     rgbLedControl.process();
     tight_loop_contents();
-    // sleep_us(20);
 }
 
 void setup1()
