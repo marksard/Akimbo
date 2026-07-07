@@ -11,6 +11,12 @@
 class SlopeGenerator
 {
 public:
+    enum class InputMode
+    {
+        Trigger,
+        Gate,
+    };
+
     SlopeGenerator(float samplingFreq = 44100.0f)
     {
         init(samplingFreq);
@@ -23,6 +29,8 @@ public:
         lastGate = false;
         eocPulse = false;
         isActive = false;
+        cycle = false;
+        inputMode = InputMode::Trigger;
         riseTimeSec = 0.0f;
         fallTimeSec = 0.1f;
         internalShape = 0.0f;
@@ -73,21 +81,17 @@ public:
         //     }
         // }
 
-        // トリガー検出（ゲートの立ち上がり）
-        bool trigger = gate && !lastGate;
+        bool gateRisingEdge = gate && !lastGate;
+        bool gateFallingEdge = !gate && lastGate;
         lastGate = gate;
 
-        // セルフサイクルの処理（動作中でなく、かつCycle有効ならトリガー）
-        if (cycle && !isActive && currentV <= 0.0001f)
+        if (inputMode == InputMode::Gate)
         {
-            trigger = true;
+            processGateMode(gate, gateRisingEdge, gateFallingEdge);
         }
-
-        // トリガーが入ったらRise（上昇）を開始
-        if (trigger && !isRising)
+        else
         {
-            isRising = true;
-            isActive = true;
+            processTriggerMode(gateRisingEdge);
         }
 
         // --- 充放電の計算 ---
@@ -140,6 +144,21 @@ public:
     inline float getValue() const { return currentV; }
     inline bool getEOC() const { return eocPulse; }
     inline void toggleCycle() { cycle = !cycle; }
+    inline void setInputMode(InputMode mode)
+    {
+        if (inputMode == mode)
+        {
+            return;
+        }
+
+        inputMode = mode;
+        resetRuntimeState();
+    }
+    inline void toggleInputMode()
+    {
+        inputMode = (inputMode == InputMode::Trigger) ? InputMode::Gate : InputMode::Trigger;
+        resetRuntimeState();
+    }
 
 private:
     float sampleRate;
@@ -149,6 +168,7 @@ private:
     bool eocPulse;
     bool isActive;
     bool cycle;
+    InputMode inputMode;
 
     // --- 事前計算（キャッシュ）用メンバ変数 ---
     float riseTimeSec;   // 現在設定されている上昇時間（秒）
@@ -159,6 +179,64 @@ private:
 
     uint32_t eocDurationSamples;
     uint32_t eocCounter;
+
+    void resetRuntimeState()
+    {
+        currentV = 0.0f;
+        isRising = false;
+        lastGate = false;
+        eocPulse = false;
+        isActive = false;
+        eocCounter = 0;
+    }
+
+    void beginRise()
+    {
+        isRising = true;
+        isActive = true;
+    }
+
+    void beginFall()
+    {
+        isRising = false;
+        isActive = currentV > 0.0f;
+    }
+
+    void processTriggerMode(bool trigger)
+    {
+        // セルフサイクルの処理（動作中でなく、かつCycle有効ならトリガー）
+        if (cycle && !isActive && currentV <= 0.0001f)
+        {
+            trigger = true;
+        }
+
+        // トリガーが入ったらRise（上昇）を開始
+        if (trigger && !isRising)
+        {
+            beginRise();
+        }
+    }
+
+    void processGateMode(bool gate, bool gateRisingEdge, bool gateFallingEdge)
+    {
+        if (gate && (gateRisingEdge || currentV < 1.0f))
+        {
+            beginRise();
+        }
+        else if (gateFallingEdge)
+        {
+            beginFall();
+        }
+        else if (cycle && !gate && !isActive && currentV <= 0.0001f)
+        {
+            beginRise();
+        }
+
+        if (gate && !isRising && currentV >= 1.0f)
+        {
+            isActive = false;
+        }
+    }
 
     // ステップ幅とパルス幅の再計算
     void updateSteps()

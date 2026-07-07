@@ -47,6 +47,7 @@ enum ButtonCondition
     UA = 0x0200,
     UB = 0x0020,
     URE = 0x0002,
+    LRE = 0x0004,
     HA = 0x0300,
     HB = 0x0030,
     HA_UB = 0x0320,
@@ -152,6 +153,10 @@ void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     else if (buttonStates == ButtonCondition::URE)
     {
         slope.toggleCycle();
+    }
+    else if (buttonStates == ButtonCondition::LRE)
+    {
+        slope.toggleInputMode();
     }
     else if (buttonStates == ButtonCondition::NONE)
     {
