@@ -5,6 +5,47 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# DualDCO
+
+DualDCOは、LFOレンジから発振するデジタルオシレーターを2基備えたファームウェアです。  
+オシレーターごとにV/OCT対応のピッチCV入力を備えているので別々に制御可能です。  
+
+## 機能概要
+
+- 入力
+  - `IN1` OSC1用V/OCT入力
+  - `IN2` OSC2用V/OCT入力
+  - `CV` 共通モジュレーション入力
+  - `POT` 基音微調整、波形変化など
+  - `RE` 基音調整、波形変更、モジュレーション設定など
+- 出力
+  - `OUT1` OSC1出力
+  - `OUT2` OSC2出力
+  - `RGB LED` C位置表示、波形設定表示、モジュレーション設定など
+
+## 使い方
+
+- モード
+  - `RE押し込み` OSC1とOSC2の設定操作を交互に切り替え
+  - `A,Bボタン` 設定モードを変更：`基音設定<->波形設定<->モジュレーション設定`  
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+
+- 基音設定
+  - `RE操作` クロマチックスケール単位で基音を選択
+  - `Aボタン押下中RE操作` オクターブ単位で基音を選択
+  - `POT操作` セント単位の微調整
+  - 以下の基音の時はLFOとして動作
+    - `C0` ~10秒
+    - `C#0` 10秒~8.66Hz(C#0)
+    - `POT操作` 周波数調整
+- 波形設定
+  - `RE操作` 矩形波、のこぎり波、乗算三角波、三角波、サイン波、ホワイトノイズを選択
+  - `POT操作` 波形の変形具合の調整（パルス幅、2波形目の位相、2波形目の位相、WaveFolder深さ、WaveFolder深さ、なし）
+- モジュレーション設定
+  - `RE操作` なし（割り当てしない）、波形変化、FM、ハードシンク
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +58,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -82,11 +124,8 @@ static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ValueLock potLock;
-
-// gpio割り込み
-static volatile bool cvEdgeLatch = false;
 
 // UIほか
 static OscillatorSettingMenu oscMenu = OscillatorSettingMenu::SEL_NOTE;
@@ -213,6 +252,7 @@ void processVCO(int16_t in1Value, int16_t in2Value, int16_t cvInValue, int16_t p
     int16_t vOcts[2] = {0};
     vOcts[0] = in1Value;
     vOcts[1] = in2Value;
+    bool cvHigh = cvInValue > (ADC_RESO >> 2);
 
     for (int i = 0; i < OSC_COUNT; ++i)
     {
@@ -234,9 +274,8 @@ void processVCO(int16_t in1Value, int16_t in2Value, int16_t cvInValue, int16_t p
         }
         if (userConfig.Config.cvInSelect[i] == CVInSelect::SYNC)
         {
-            if (cvEdgeLatch)
+            if (cvHigh)
             {
-                cvEdgeLatch = false;
                 osc[i].reset();
             }
         }
@@ -257,35 +296,35 @@ void processVCO(int16_t in1Value, int16_t in2Value, int16_t cvInValue, int16_t p
         osc[i].setFrequency(vOctFreq);
     }
 
-    static uint16_t dispCount = 0;
-    dispCount++;
-    if (dispCount == 2000)
-    {
-        dispCount = 0;
-        Serial.print(" vref:");
-        Serial.print(adcErrorCorrection.getLastVRef(), 4);
-        Serial.print(" noise:");
-        Serial.print(adcErrorCorrection.getLastNoiseFloor(), 1);
-        Serial.print(" setupAdc:");
-        Serial.print(setupAdc);
-        Serial.print(" fine:");
-        Serial.print(userConfig.Config.fineTune[0]);
-        // Serial.print(", ");
-        // Serial.print(userConfig.Config.fineTune[1]);
-        Serial.print(" vOcts:");
-        Serial.print(vOcts[0]);
-        // Serial.print(", ");
-        // Serial.print(vOcts[1]);
-        Serial.print(" voctRaw:");
-        Serial.print(adcErrorCorrection.correctedAdc(vOcts[0]));
-        // Serial.print(", ");
-        // Serial.print(adcErrorCorrection.correctedAdc(vOcts[1]));
-        Serial.print(" voctPowV:");
-        Serial.print(adcErrorCorrection.voctPow(vOcts[0]));
-        // Serial.print(", ");
-        // Serial.print(adcErrorCorrection.voctPow(vOcts[1]));
-        Serial.println();
-    }
+    // static uint16_t dispCount = 0;
+    // dispCount++;
+    // if (dispCount == 2000)
+    // {
+    //     dispCount = 0;
+    //     Serial.print(" vref:");
+    //     Serial.print(adcErrorCorrection.getLastVRef(), 4);
+    //     Serial.print(" noise:");
+    //     Serial.print(adcErrorCorrection.getLastNoiseFloor(), 1);
+    //     Serial.print(" setupAdc:");
+    //     Serial.print(setupAdc);
+    //     Serial.print(" fine:");
+    //     Serial.print(userConfig.Config.fineTune[0]);
+    //     // Serial.print(", ");
+    //     // Serial.print(userConfig.Config.fineTune[1]);
+    //     Serial.print(" vOcts:");
+    //     Serial.print(vOcts[0]);
+    //     // Serial.print(", ");
+    //     // Serial.print(vOcts[1]);
+    //     Serial.print(" voctRaw:");
+    //     Serial.print(adcErrorCorrection.correctedAdc(vOcts[0]));
+    //     // Serial.print(", ");
+    //     // Serial.print(adcErrorCorrection.correctedAdc(vOcts[1]));
+    //     Serial.print(" voctPowV:");
+    //     Serial.print(adcErrorCorrection.voctPow(vOcts[0]));
+    //     // Serial.print(", ");
+    //     // Serial.print(adcErrorCorrection.voctPow(vOcts[1]));
+    //     Serial.println();
+    // }
 }
 
 void operationVCO(uint16_t buttonStates, int8_t encValue, int16_t potValue)
@@ -477,7 +516,7 @@ void calibration(float &vref, float &noiseFloor)
     if (adc >= DAC_RESO - 3)
     {
         // 3.26989付近なので半分の電圧から推定しなおす
-        dac.out1((DAC_RESO >> 1) + (DAC_RESO >> 3)); // 2.5V
+        dac.out1((DAC_RESO >> 1) + (DAC_RESO >> 2)); // 2.5V
         sleep_ms(1);
         adc = adcErrorCorrection.getADCAvg16(IN1);
         Serial.print(" at 2.5V:");
@@ -494,21 +533,6 @@ void calibration(float &vref, float &noiseFloor)
     Serial.println(noiseFloor);
 
     adcErrorCorrection.generateLUT(vref, noiseFloor);
-}
-
-void edgeCallback(uint gpio, uint32_t events)
-{
-    if (gpio == CV1)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            cvEdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            cvEdgeLatch = false;
-        }
-    }
 }
 
 void interruptPWM()
@@ -548,7 +572,7 @@ void setup()
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
 
-    rgbLedControl.init(10000, PWM_BIT, LED_R, LED_G, LED_B);
+    rgbLedControl.init(40000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(oscColor);
     rgbLedControl.ignoreMenuColor(false);
     rgbLedControl.setWave(MiniOsc::Wave::TRI);
@@ -613,10 +637,6 @@ void setup()
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
 
-    gpio_set_irq_enabled(CV1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_callback(edgeCallback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
-
     updateMenuColor();
 }
 
@@ -639,11 +659,12 @@ void loop()
 
     rgbLedControl.process();
     tight_loop_contents();
-    sleep_us(100);
 }
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
+    sleep_ms(500);
 }
 
 void loop1()
