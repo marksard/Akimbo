@@ -2,6 +2,7 @@
  * MultiFilter
  * The code is based on the following: 
  * https://www.utsbox.com/?page_id=728
+ * 2-pole (Bi-Quad) type
  */
 
 #pragma once

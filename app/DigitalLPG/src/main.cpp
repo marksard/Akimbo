@@ -5,6 +5,34 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# DCF/DCA/DigitalLPG
+
+DCF/DCA/DigitalLPGは、12bit44.1kHzで入出力するDCF/DCAファームウェアです。  
+2次LPFのDCF->DCA接続モードと、2次LPFにディケイタイムを加えたLPGモードから選択して音色変化を与えることが出来ます。  
+
+## 機能概要
+
+- 入力
+  - `IN1` DCF Freq CV入力
+  - `IN2` DCA Level CV入力
+  - `CV` 音声・CV入力
+  - `POT` DCF 周波数調整
+  - `RE` レゾナンス調整、各種設定など
+- 出力
+  - `OUT1` 音声・CV出力
+  - `RGB LED` 設定表示など
+
+## 使い方
+
+- モード
+  - `RE押し込み` LPGモード：DCF/DCAモード切り替え
+  - `A,Bボタン` 設定モードを変更：`レゾナンス調整<->DCF Freq入力調整<->DCA Level入力調整<->LPGディケイタイム調整`  
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+  - `RE操作` 各設定値の調整
+  - `POT` DCF 周波数調整
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +45,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -68,7 +97,7 @@ static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ValueLock potLock;
 
 // UIほか
@@ -322,6 +351,7 @@ void loop()
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
     sleep_ms(500);
 }
 

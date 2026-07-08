@@ -5,6 +5,36 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# RhythmBox
+
+RhythmBoxは、12bit44.1kHzのサンプリングドラムマシンのファームウェアです。
+3音同時発音、各出力3種の音色を備え、ステレオ出力に対応しています。
+
+## 機能概要
+
+- 入力
+  - `IN1` BDバンク用トリガー入力
+  - `IN2` SDバンク用トリガー入力
+  - `CV` HHバンク用トリガー入力
+  - `POT` ミュート切り替え（ミュート<->BD<->BD,HH<->BD,SD,HH）
+  - `RE` 各バンクの音色選択、音色設定
+- 出力
+  - `OUT1` Lch出力
+  - `OUT2` Rch出力
+  - `RGB LED` 音色表示、音色設定表示など
+
+## 使い方
+
+- モード
+  - `RE押し込み` 音色設定：`音色->音量->音程->パン->ディケイ->ミュート->音色...`
+  - `A,Bボタン` バンク切り替え：`BD<->SD<->HH`
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+
+- 音色設定
+  - `RE操作` 音色、設定値の変更
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +47,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "gpio_mapping.h"
 #include "basic_definition.h"
@@ -81,13 +112,11 @@ enum ButtonCondition
 static uint interruptSliceNum;
 static RotaryEncoder enc;
 static Button buttons[3];
-// static SmoothAnalogRead in1;
 static SmoothAnalogRead cvIn;
-// static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 
 // UIほか
 #define OSC_MENU_MAX 4
@@ -109,12 +138,11 @@ SingleShotWave RS1(buf_808_Rim_01, buf_size_808_Rim_01);
 SingleShotWave OH1(buf_808_OHH_01, buf_size_808_OHH_01);
 SingleShotWave OH2(buf_909_OH, buf_size_909_OH);
 SingleShotWave RC2(buf_909_RC, buf_size_909_RC);
-SingleShotWave<int16_t> *pKit[SOUND_BANK_COUNT][SOUND_WAVE_COUNT] = 
-{
-    {&BD1, &BD2, &LT2},
-    {&SD1, &SD2, &RS1},
-    {&OH1, &OH2, &RC2}
-};
+SingleShotWave<int16_t> *pKit[SOUND_BANK_COUNT][SOUND_WAVE_COUNT] =
+    {
+        {&BD1, &BD2, &LT2},
+        {&SD1, &SD2, &RS1},
+        {&OH1, &OH2, &RC2}};
 
 // ユーザー設定（EEPROM保存用）
 struct UserConfig
@@ -261,7 +289,8 @@ void operationParameter(uint16_t buttonStates, int8_t encValue, int16_t potValue
     for (int i = 0; i < SOUND_BANK_COUNT + 1; ++i)
     {
         int8_t mute = mutes[i];
-        if (mute == -1)continue;
+        if (mute == -1)
+            continue;
         if (i <= muteIndex)
         {
             pKit[mute][0]->setMute(true);
@@ -325,8 +354,6 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    // in1.init(IN1);
-    // in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
@@ -378,6 +405,8 @@ void loop()
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
+    sleep_ms(500);
 }
 
 void loop1()

@@ -5,6 +5,37 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# CheapRhythm
+
+CheapRhythmは、1OSC,1NOISE,1FILTER,1AMP,2ENV構成のドラムシンセ1基の音色をCVで切り替えて出力するドラムマシンファームウェアです。  
+トリガーとCVの組み合わせでパターン演奏が可能です。  
+LFO出力は内部で接続されていないので、IN2やCVに入れて活用することも可能です。  
+
+## 機能概要
+
+- 入力
+  - `IN1` トリガー入力
+  - `IN2` 音色選択`BD<->SD<->HH<->TOM`
+  - `CV` ディケイ入力
+  - `POT` LFO周波数調整(0.01~10Hz)、初期波形：三角波
+  - `RE` 音色設定など
+- 出力
+  - `OUT1` ドラムシンセ出力
+  - `OUT2` LFO出力
+  - `RGB LED` LFO周期表示、設定表示など
+
+## 使い方
+
+- モード
+  - `RE押し込み` バンク切り替え：`LFOモニタ->BD->SD->HH->TOM->LFOモニタ...`
+  - `Aボタン` チープモード（FM・フィルターをバイパス）切り替え
+  - `Bボタン` 内臓LFO波形変更：`矩形波->のこぎり波->三角波、ノイズ`
+
+- 基音設定
+  - `RE操作` 音色調整
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +48,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 // #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -67,11 +99,8 @@ static SmoothAnalogRead cvIn;
 static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ValueLock potLock;
-
-// gpio割り込み
-static volatile bool in1EdgeLatch = false;
 static EdgeChecker gateEdge;
 
 // UIほか
@@ -158,23 +187,6 @@ bool updatePotLock(int16_t potValue, int8_t sel1, int8_t sel2)
 
 //////////////////////////////////////////
 
-void edgeCallback(uint gpio, uint32_t events)
-{
-    if (gpio == IN1)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            in1EdgeLatch = true;
-            gateEdge.updateEdge(1);
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            in1EdgeLatch = false;
-            gateEdge.updateEdge(0);
-        }
-    }
-}
-
 void interruptPWM()
 {
     pwm_clear_irq(interruptSliceNum);
@@ -203,11 +215,11 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    // in1.init(IN1);
     in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
+    gateEdge.init(IN1);
 
     rgbLedControl.init(20000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(menuColor);
@@ -222,11 +234,6 @@ void setup()
     lfo.setLevel(12);
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
-    gpio_init(IN1);
-    gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_callback(edgeCallback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 void loop()
@@ -240,6 +247,7 @@ void loop()
     static CheapRhythm88::Type drum = CheapRhythm88::Type::DRUM_KICK;
     static int16_t edgeCV = 0;
     static int16_t edgePitch = 0;
+    bool in1EdgeLatch = gateEdge.isEdgeHigh();
     if (in1EdgeLatch)
     {
         cr88.start();
@@ -270,6 +278,8 @@ void loop()
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
+    sleep_ms(500);
 }
 
 void loop1()
