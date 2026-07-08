@@ -38,7 +38,8 @@ public:
         _flactLevel = _rnd.getRandom16(0, 10001) / 10000.0f;
     }
 
-    void setMaxLevel(uint16_t value) {
+    void setMaxLevel(uint16_t value)
+    {
         _maxLevel = constrain(value, 0, _resoM1);
     }
 
@@ -72,7 +73,7 @@ public:
         {
             if (_isFluctuation == false)
             {
-                _flactLevel = _rnd.getRandom16(0, 10001) / 10000.0f;
+                _flactLevel = (float)_rnd.getRandom16(0, 10001) * 0.0001f; // 0.0～1.0の乱数
             }
             else
             {
@@ -125,15 +126,20 @@ private:
         return result;
     }
 
-    float fluctuation1f(float x) {
-        if (x <= 0.1f || x >= 0.9f) {
-            return (float)_rnd.getRandom16(0, 10001) / 10000.0f;  // 0.0～1.0の乱数
+    float fluctuation1f(float x)
+    {
+        // 両端に張り付くのを防ぐ
+        if (x <= 0.02f || x >= 0.98f)
+        {
+            return (float)_rnd.getRandom16(0, 10001) * 0.0001f; // 0.0～1.0の乱数
         }
 
-        if (x < 0.5f) {
+        if (x < 0.5f)
+        {
             return x + 2.0f * x * x;
         }
-        // x < 0.95f
+
+        // 0.5〜0.97f間の計算
         return x - 2.0f * (1.0f - x) * (1.0f - x);
     }
 };

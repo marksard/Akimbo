@@ -5,6 +5,45 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# SmoothRandomCV
+
+SmoothRandomCVは、Random+SH+Slewを組み合わせてスムーズに可変するCVを出力するファームウェアです。  
+ホワイトノイズか1/fゆらぎの値をトリガー毎に固定し出力し、±5Vか0~5Vのminorスケールで出力します。  
+
+## 機能概要
+
+- 入力
+  - `IN1` タップテンポトリガー入力
+  - `POT` 到達時間調整
+  - `RE` 各種設定
+- 出力
+  - `OUT1` SmoothRandomCV出力
+  - `OUT2` タップテンポ出力
+  - `RGB LED` タップテンポ表示、各種設定表示
+
+## 使い方
+
+- モード
+  - `A,Bボタン` 設定モードを変更：`タップテンポ<->出力レベル設定<->アルゴリズム設定<->RUNモード<->オクターブ設定`  
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+
+- タップテンポ
+  - `Aボタン` 押下した間隔でトリガーを出力します
+- 出力レベル設定
+  - `RE操作` ±5V出力、0V~のマイナースケール出力かを選択
+- アルゴリズム設定
+  - `RE操作` ホワイトノイズ、1/fゆらぎ（ピンクノイズ）のアルゴリズムを選択
+- RUNモード
+  - `RE操作` フリー、タップテンポでのSHを選択
+- オクターブ設定
+  - `RE操作` 1~5octまでを選択
+
+## 現状補足
+
+- 出力レベル±5V、RUNモードをフリーにしたらホワイトノイズとピンクが出る
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +56,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -28,13 +68,6 @@
 #include "lib/Quantizer.hpp"
 #include "lib/EdgeChecker.hpp"
 #include "SmoothRandomCV.hpp"
-
-enum ChannelSelect
-{
-    RND_A = 0,
-    RND_B,
-    MAX = RND_B
-};
 
 enum SettingMenu
 {
@@ -83,46 +116,39 @@ static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ValueLock potLock;
 
 // gpio割り込み
-static volatile bool in1EdgeLatch = false;
-// static volatile bool in2EdgeLatch = false;
 static EdgeChecker clockEdge;
 
 // UIほか
 static RGBLEDPWMControl::MenuColor oscColor = RGBLEDPWMControl::MenuColor::BLACK;
 static EEPROMConfigIO<SystemConfig> systemConfig(0);
 static SettingMenu settingMenu = SettingMenu::SEL_TAP_TEMPO;
-static ChannelSelect channelSelect = ChannelSelect::RND_A;
 
 // 機能
-#define RND_COUNT 2
 static int16_t bias = DAC_RESO >> 1;
-static SmoothRandomCV rndCV[RND_COUNT];
+static SmoothRandomCV rndCV;
 static Quantizer quantizer(bias);
 
 // ユーザー設定（EEPROM保存用）
 struct UserConfig
 {
-    char ver[15] = "D_SMTRND_001\0"; // 構造体最初の15バイトは保存データ識別子。固有の文字列にすること。
-    WaveStyle style[RND_COUNT];
-    int16_t curve[RND_COUNT];
-    int8_t octave[RND_COUNT];
-    int8_t algorithm[RND_COUNT];
-    int8_t runMode[RND_COUNT];
+    char ver[15] = "D_SMTRND_000\0"; // 構造体最初の15バイトは保存データ識別子。固有の文字列にすること。
+    WaveStyle style;
+    int16_t curve;
+    int8_t octave;
+    int8_t algorithm;
+    int8_t runMode;
 
     UserConfig()
     {
-        for (int i = 0; i < RND_COUNT; ++i)
-        {
-            style[i] = STYLE_RAW;
-            curve[i] = 10;
-            octave[i] = 3;
-            algorithm[i] = 1;
-            runMode[i] = 1;
-        }
+        style = STYLE_RAW;
+        curve = 10;
+        octave = 3;
+        algorithm = 1;
+        runMode = 1;
     }
 };
 static EEPROMConfigIO<UserConfig> userConfig(64); // systemConfigから64バイト開けておく
@@ -134,53 +160,26 @@ void updateMenuColor()
     rgbLedControl.resetFreq();
     rgbLedControl.resetLevel();
 
-    if (channelSelect == ChannelSelect::RND_A)
+    oscColor = RGBLEDPWMControl::MenuColor::CYAN;
+    switch (settingMenu)
     {
-        oscColor = RGBLEDPWMControl::MenuColor::CYAN;
-        switch (settingMenu)
-        {
-        case SettingMenu::SEL_TAP_TEMPO:
-            rgbLedControl.resetFreq();
-            break;
-        case SettingMenu::SEL_STYLE:
-            rgbLedControl.setFreq(2);
-            break;
-        case SettingMenu::SEL_ALGORITHM:
-            rgbLedControl.setFreq(4);
-            break;
-        case SettingMenu::SEL_RUNMODE:
-            rgbLedControl.setFreq(8);
-            break;
-        case SettingMenu::SEL_OCTAVE:
-            rgbLedControl.setFreq(16);
-            break;
-        default:
-            break;
-        }
-    }
-    else if (channelSelect == ChannelSelect::RND_B)
-    {
-        oscColor = RGBLEDPWMControl::MenuColor::MAGENTA;
-        switch (settingMenu)
-        {
-        case SettingMenu::SEL_TAP_TEMPO:
-            rgbLedControl.resetFreq();
-            break;
-        case SettingMenu::SEL_STYLE:
-            rgbLedControl.setFreq(2);
-            break;
-        case SettingMenu::SEL_ALGORITHM:
-            rgbLedControl.setFreq(4);
-            break;
-        case SettingMenu::SEL_RUNMODE:
-            rgbLedControl.setFreq(8);
-            break;
-        case SettingMenu::SEL_OCTAVE:
-            rgbLedControl.setFreq(16);
-            break;
-        default:
-            break;
-        }
+    case SettingMenu::SEL_TAP_TEMPO:
+        rgbLedControl.resetFreq();
+        break;
+    case SettingMenu::SEL_STYLE:
+        rgbLedControl.setFreq(2);
+        break;
+    case SettingMenu::SEL_ALGORITHM:
+        rgbLedControl.setFreq(4);
+        break;
+    case SettingMenu::SEL_RUNMODE:
+        rgbLedControl.setFreq(8);
+        break;
+    case SettingMenu::SEL_OCTAVE:
+        rgbLedControl.setFreq(16);
+        break;
+    default:
+        break;
     }
 
     rgbLedControl.setMenuColor(oscColor);
@@ -192,25 +191,16 @@ void changeMenu(int encValue)
     updateMenuColor();
 }
 
-void toggleChannel()
-{
-    channelSelect = channelSelect == ChannelSelect::RND_A ? ChannelSelect::RND_B : ChannelSelect::RND_A;
-    settingMenu = SettingMenu::SEL_TAP_TEMPO;
-    updateMenuColor();
-}
-
-bool updatePotLock(int16_t potValue, int8_t sel1, int8_t sel2)
+bool updatePotLock(int16_t potValue, int8_t sel1)
 {
     static int8_t lastSel1 = -1;
-    static int8_t lastSel2 = -1;
 
-    if (lastSel1 != sel1 || lastSel2 != sel2)
+    if (lastSel1 != sel1)
     {
         potLock.setLock(true);
     }
 
     lastSel1 = sel1;
-    lastSel2 = sel2;
 
     return potLock.update(potValue);
 }
@@ -219,10 +209,16 @@ bool updatePotLock(int16_t potValue, int8_t sel1, int8_t sel2)
 
 void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t in2Value)
 {
-    // taptempo process
+    static volatile ulong lastTime = 0;
+    ulong currentTime = micros();
+    bool in1EdgeLatch = clockEdge.isEdgeHigh();
+    if (in1EdgeLatch)
     {
-        static volatile ulong lastTime = 0;
-        ulong currentTime = micros();
+        lastTime = currentTime;
+        dac.out2(DAC_RESO - 1);
+    }
+    else
+    {
         int duration = clockEdge.getDurationMicros();
         if (currentTime - lastTime > duration)
         {
@@ -240,20 +236,15 @@ void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t i
         }
     }
 
-    bool on = (userConfig.Config.runMode[0] == 1) ? in1EdgeLatch : true;
-    rndCV[0].update(on, true);
-    int16_t level = (int16_t)rndCV[0].getLevel();
-    if (userConfig.Config.style[0] == WaveStyle::STYLE_PITCH)
+    bool on = (userConfig.Config.runMode == 1) ? in1EdgeLatch : true;
+    rndCV.update(on, true);
+    int16_t level = (int16_t)rndCV.getLevel();
+    if (userConfig.Config.style == WaveStyle::STYLE_PITCH)
     {
-        level = quantizer.Quantize(map(level, 0, ADC_RESO - 1, 0, (7 * userConfig.Config.octave[0]))) + bias;
+        level = quantizer.Quantize(map(level, 0, ADC_RESO - 1, 0, (7 * userConfig.Config.octave))) + bias;
     }
 
     dac.out1(level);
-
-    if (in1EdgeLatch)
-    {
-        in1EdgeLatch = false;
-    }
 
     // static int32_t sampleFreq = 0;
     // sampleFreq = getSamplingFrequency();
@@ -263,17 +254,14 @@ void processEnv(int16_t cvInValue, int16_t potValue, int16_t in1Value, int16_t i
     //     cnt = 0;
     //     Serial.print("SampleFreq:");
     //     Serial.print(sampleFreq);
-    //     Serial.print(" level[0]:");
-    //     Serial.print(level[0]);
-    //     Serial.print(" level[1]:");
-    //     Serial.print(level[1]);
+    //     Serial.print(" level:");
+    //     Serial.print(level);
     //     Serial.println();
     // }
 }
 
 void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
 {
-    int8_t index = channelSelect;
     if (buttonStates == ButtonCondition::UA)
     {
         if (settingMenu == SettingMenu::SEL_TAP_TEMPO)
@@ -289,7 +277,6 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     }
     else if (buttonStates == ButtonCondition::URE)
     {
-        toggleChannel();
     }
     else if (buttonStates == ButtonCondition::HA)
     {
@@ -312,86 +299,44 @@ void operationEnv(uint16_t buttonStates, int8_t encValue, int16_t potValue)
             rgbLedControl.setFreq(1000.0 / clockEdge.getDurationMills());
             break;
         case SettingMenu::SEL_STYLE:
-            userConfig.Config.style[index] = (WaveStyle)constrain((int8_t)(userConfig.Config.style[index] + encValue), WaveStyle::STYLE_RAW, WaveStyle::STYLE_MAX);
-            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.style[index], (int8_t)WaveStyle::STYLE_RAW, (int8_t)WaveStyle::STYLE_MAX);
+            userConfig.Config.style = (WaveStyle)constrain((int16_t)(userConfig.Config.style + encValue), WaveStyle::STYLE_RAW, WaveStyle::STYLE_MAX);
+            rgbLedControl.setRainbowLevel((int16_t)userConfig.Config.style, (int16_t)WaveStyle::STYLE_RAW, (int16_t)WaveStyle::STYLE_MAX);
             break;
         case SettingMenu::SEL_ALGORITHM:
-            userConfig.Config.algorithm[index] = constrain(userConfig.Config.algorithm[index] + encValue, 0, 1);
-            rndCV[index].enableFluctuation(userConfig.Config.algorithm[index] == 1 ? true : false);
-            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.algorithm[index], (int8_t)0, (int8_t)1);
+            userConfig.Config.algorithm = constrain(userConfig.Config.algorithm + encValue, 0, 1);
+            rndCV.enableFluctuation(userConfig.Config.algorithm == 1 ? true : false);
+            rgbLedControl.setRainbowLevel((int16_t)userConfig.Config.algorithm, (int16_t)0, (int16_t)1);
             break;
         case SettingMenu::SEL_RUNMODE:
-            userConfig.Config.runMode[index] = constrain(userConfig.Config.runMode[index] + encValue, 0, 1);
-            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.runMode[index], (int8_t)0, (int8_t)1);
+            userConfig.Config.runMode = constrain(userConfig.Config.runMode + encValue, 0, 1);
+            rgbLedControl.setRainbowLevel((int16_t)userConfig.Config.runMode, (int16_t)0, (int16_t)1);
             break;
         case SettingMenu::SEL_OCTAVE:
-            userConfig.Config.octave[index] = constrain(userConfig.Config.octave[index] + encValue, 1, 5);
-            rgbLedControl.setRainbowLevel((int8_t)userConfig.Config.octave[index], (int8_t)1, (int8_t)5);
+            userConfig.Config.octave = constrain(userConfig.Config.octave + encValue, 1, 5);
+            rgbLedControl.setRainbowLevel((int16_t)userConfig.Config.octave, (int16_t)1, (int16_t)5);
             break;
         default:
             break;
         }
     }
 
-    bool lock = updatePotLock(potValue, settingMenu, channelSelect);
+    bool lock = updatePotLock(potValue, settingMenu);
     if (lock == false)
     {
-        // switch (settingMenu)
-        // {
-        // case SettingMenu::SEL_STYLE:
-        //     break;
-        // case SettingMenu::SEL_ALGORITHM:
-        //     break;
-        // case SettingMenu::SEL_RUNMODE:
-        //     break;
-        // case SettingMenu::SEL_OCTAVE:
-        //     break;
-        // default:
-        //     break;
-        // }
-
-        userConfig.Config.curve[index] = constrain(map(potValue, 0, DAC_RESO - 1, 1, 32), 1, 32);
-        rndCV[index].setCurve(userConfig.Config.curve[index]);
-        if (userConfig.Config.curve[index] >= 32)
+        userConfig.Config.curve = constrain(map(potValue, 0, DAC_RESO - 1, 1, 32), 1, 32);
+        rndCV.setCurve(userConfig.Config.curve);
+        if (userConfig.Config.curve >= 32)
         {
-            rndCV[index].enableSmoothing(false);
+            rndCV.enableSmoothing(false);
         }
         else
         {
-            rndCV[index].enableSmoothing(true);
+            rndCV.enableSmoothing(true);
         }
     }
 }
 
 //////////////////////////////////////////
-
-void edgeCallback(uint gpio, uint32_t events)
-{
-    if (gpio == IN1)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            clockEdge.updateEdge(1);
-            in1EdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            clockEdge.updateEdge(0);
-            in1EdgeLatch = false;
-        }
-    }
-    // else if (gpio == IN2)
-    // {
-    //     if (events & GPIO_IRQ_EDGE_RISE)
-    //     {
-    //         in2EdgeLatch = true;
-    //     }
-    //     else if (events & GPIO_IRQ_EDGE_FALL)
-    //     {
-    //         in2EdgeLatch = false;
-    //     }
-    // }
-}
 
 void interruptPWM()
 {
@@ -417,14 +362,12 @@ void setup()
     buttons[1].setHoldTime(350);
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
-    // in1.init(IN1);
-    in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
     clockEdge.init(IN1);
 
-    rgbLedControl.init(30000, PWM_BIT, LED_R, LED_G, LED_B);
+    rgbLedControl.init(40000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(RGBLEDPWMControl::MenuColor::BLACK);
     rgbLedControl.ignoreMenuColor(false);
     rgbLedControl.setWave(MiniOsc::Wave::TRI);
@@ -436,42 +379,33 @@ void setup()
     adcErrorCorrection.init(systemConfig.Config.vRef, systemConfig.Config.noiseFloor);
 
     quantizer.setScale(5); // minor
-    for (int i = 0; i < RND_COUNT; ++i)
-    {
-        rndCV[i].init(DAC_RESO);
-        rndCV[i].setMaxLevel(DAC_RESO - 1);
-        rndCV[i].setCurve(userConfig.Config.curve[i]);
-    }
+    rndCV.init(DAC_RESO);
+    rndCV.setMaxLevel(DAC_RESO - 1);
+    rndCV.setCurve(userConfig.Config.curve);
+    rndCV.enableFluctuation(userConfig.Config.algorithm == 1 ? true : false);
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
-    gpio_init(IN1);
-    gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    // gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_callback(edgeCallback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
 
     updateMenuColor();
 }
 
 void loop()
 {
-    int8_t encValue = enc.getDirection(true);
+    int8_t encValue = enc.getDirection();
     int16_t cvInValue = cvIn.analogReadDirectFast() - bias;
-    // int16_t in1Value = adcErrorCorrection.correctedAdc(in1.analogReadDirectFast());
     int16_t in1Value = 0;
-    int16_t in2Value = adcErrorCorrection.correctedAdc(in2.analogReadDirectFast());
+    int16_t in2Value = 0;
     int16_t potValue = adcErrorCorrection.correctedAdc(pot.analogReadDirectFast());
 
     processEnv(cvInValue, potValue, in1Value, in2Value);
 
     rgbLedControl.process();
     tight_loop_contents();
-    // sleep_us(20);
 }
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
     sleep_ms(500);
 }
 
