@@ -17,7 +17,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "gpio_mapping.h"
 #include "basic_definition.h"
@@ -52,7 +53,7 @@ static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static RGBLEDPWMControl::MenuColor menuColor = RGBLEDPWMControl::MenuColor::RED;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ADCErrorCorrection adcErrorCorrection;
 static EEPROMConfigIO<SystemConfig> systemConfig(0);
 
