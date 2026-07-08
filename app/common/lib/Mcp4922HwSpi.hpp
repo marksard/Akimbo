@@ -40,7 +40,8 @@ public:
 
         while (spi_is_busy(_spi))
         {
-            tight_loop_contents();
+            // tight_loop_contents();
+            ;
         }
         gpio_put(_pinCs, 1);
     }
@@ -55,7 +56,8 @@ public:
 
         while (spi_is_busy(_spi))
         {
-            tight_loop_contents();
+            // tight_loop_contents();
+            ;
         }
         gpio_put(_pinCs, 1);
     }
