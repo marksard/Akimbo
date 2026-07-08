@@ -5,6 +5,52 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# ChordDCO
+
+ChordDCOは、デジタルオシレーター4基で和音発声するファームウェアです。  
+和音出力のほかにルート音の独立出力と和音のアルペジオ演奏機能も備えています。  
+
+## 機能概要
+
+- 入力
+  - `IN1` OSC1用V/OCT入力
+  - `IN2` コードホールド、アルペジオ用トリガー入力
+  - `CV` モジュレーション入力
+  - `POT` 転回形変更、波形変化など
+  - `RE` 基音調整、波形変更、モジュレーション設定など
+- 出力
+  - `OUT1` 和音出力
+  - `OUT2` ルート音・アルペジオ音出力
+  - `RGB LED` C位置表示、波形設定表示、モジュレーション設定など
+
+## 使い方
+
+- モード
+  - `A,Bボタン` 設定モードを変更：`基音設定<->波形設定<->モジュレーション設定<->コードホールド設定`  
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+
+- 基音設定
+  - `RE操作` クロマチックスケール単位で基音を選択
+  - `Aボタン押下中RE操作` オクターブ単位で基音を選択
+  - `POT操作` コードの転回形を変更
+- 波形設定
+  - `RE操作` 矩形波、のこぎり波、乗算三角波、三角波、サイン波、ホワイトノイズを選択
+  - `POT操作` 波形の変形具合の調整（パルス幅、2波形目の位相、2波形目の位相、WaveFolder深さ、WaveFolder深さ、なし）
+- モジュレーション設定
+  - `RE操作` なし（割り当てしない）、波形変化
+- コードホールド設定
+  - V/OCTとトリガーが独立して動作しているとき、トリガーON時にV/OCTを読み取ること和音の発声を固定する
+  - `RE操作`
+    - 'しない' 常にV/OCT入力を読み取り、クロマチックスケールで区間で区切られた電圧値に達したらコードを変更
+    - 'する' トリガーON時にV/OCT入力を読み取り、クロマチックスケールで区間で区切られた電圧値に達したらコードを変更
+
+## 現状補足
+
+- マイナーコード固定
+- 上昇アルペジオ固定
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -17,7 +63,8 @@
 #include "lib/ADCErrorCorrection.hpp"
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
-#include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922SwSpi.hpp"
+#include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -79,15 +126,11 @@ static RotaryEncoder enc;
 static Button buttons[3];
 static SmoothAnalogRead in1;
 static SmoothAnalogRead cvIn;
-// static SmoothAnalogRead in2;
 static SmoothAnalogRead pot;
 static RGBLEDPWMControl rgbLedControl;
 static ADCErrorCorrection adcErrorCorrection;
-static Mcp4922SwSpi dac;
+static Mcp4922HwSpi dac;
 static ValueLock potLock;
-
-// gpio割り込み
-static volatile bool in2EdgeLatch = false;
 static EdgeChecker gateEdge;
 
 // UIほか
@@ -268,10 +311,18 @@ void processVCO(int16_t in1Value, int16_t cvInValue, int16_t potValue)
     int8_t rootMinus = r7OctSet[userConfig.Config.r7OctSelect][0];
     int8_t seventhMinus = r7OctSet[userConfig.Config.r7OctSelect][1];
 
+    bool in2EdgeLatch = gateEdge.isEdgeHigh();
+    if (userConfig.Config.voctHold == 0 || (userConfig.Config.voctHold == 1 && in2EdgeLatch))
+    {
+        osc[0].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][0] + rootMinus);
+        osc[1].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][1]);
+        osc[2].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][2]);
+        osc[3].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][3] + seventhMinus);
+    }
+
     // arpeggio
     if (in2EdgeLatch)
     {
-        in2EdgeLatch = false;
         if (userConfig.Config.arpMode == 0)
             userConfig.Config.arpStep = 0;
         else if (userConfig.Config.arpMode == 1)
@@ -280,14 +331,6 @@ void processVCO(int16_t in1Value, int16_t cvInValue, int16_t potValue)
             userConfig.Config.arpStep = constrainCyclic(userConfig.Config.arpStep - 1, 0, 3);
         else
             userConfig.Config.arpStep = rnd.getRandom16(4);
-    }
-
-    if (userConfig.Config.voctHold == 0 || (userConfig.Config.voctHold == 1 && gateEdge.getValue()))
-    {
-        osc[0].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][0] + rootMinus);
-        osc[1].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][1]);
-        osc[2].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][2]);
-        osc[3].setFreqFromNoteIndex(userConfig.Config.courseIndex + voctIndex + addRootScale[userConfig.Config.scale][scaleIndex][3] + seventhMinus);
     }
 
     for (int i = 0; i < OSC_COUNT; ++i)
@@ -307,23 +350,23 @@ void processVCO(int16_t in1Value, int16_t cvInValue, int16_t potValue)
         }
     }
 
-    static uint16_t dispCount = 0;
-    dispCount++;
-    if (dispCount == 2000)
-    {
-        dispCount = 0;
-        Serial.print(" vref:");
-        Serial.print(adcErrorCorrection.getLastVRef(), 4);
-        Serial.print(" noise:");
-        Serial.print(adcErrorCorrection.getLastNoiseFloor(), 2);
-        Serial.print(" course:");
-        Serial.print(userConfig.Config.courseIndex);
-        Serial.print(" voctIndex:");
-        Serial.print(voctIndex);
-        Serial.print(" userConfig.Config.arpStep:");
-        Serial.print(userConfig.Config.arpStep);
-        Serial.println();
-    }
+    // static uint16_t dispCount = 0;
+    // dispCount++;
+    // if (dispCount == 2000)
+    // {
+    //     dispCount = 0;
+    //     Serial.print(" vref:");
+    //     Serial.print(adcErrorCorrection.getLastVRef(), 4);
+    //     Serial.print(" noise:");
+    //     Serial.print(adcErrorCorrection.getLastNoiseFloor(), 2);
+    //     Serial.print(" course:");
+    //     Serial.print(userConfig.Config.courseIndex);
+    //     Serial.print(" voctIndex:");
+    //     Serial.print(voctIndex);
+    //     Serial.print(" userConfig.Config.arpStep:");
+    //     Serial.print(userConfig.Config.arpStep);
+    //     Serial.println();
+    // }
 }
 
 void operationVCO(uint16_t buttonStates, int8_t encValue, int16_t potValue)
@@ -480,7 +523,7 @@ void calibration(float &vref, float &noiseFloor)
     if (adc >= DAC_RESO - 3)
     {
         // 3.26989付近なので半分の電圧から推定しなおす
-        dac.out1((DAC_RESO >> 1) + (DAC_RESO >> 3)); // 2.5V
+        dac.out1((DAC_RESO >> 1) + (DAC_RESO >> 2)); // 2.5V
         sleep_ms(1);
         adc = adcErrorCorrection.getADCAvg16(IN1);
         Serial.print(" at 2.5V:");
@@ -496,23 +539,6 @@ void calibration(float &vref, float &noiseFloor)
     Serial.println(noiseFloor);
 
     adcErrorCorrection.generateLUT(vref, noiseFloor);
-}
-
-void edgeCallback(uint gpio, uint32_t events)
-{
-    if (gpio == IN2)
-    {
-        if (events & GPIO_IRQ_EDGE_RISE)
-        {
-            gateEdge.updateEdge(1);
-            in2EdgeLatch = true;
-        }
-        else if (events & GPIO_IRQ_EDGE_FALL)
-        {
-            gateEdge.updateEdge(0);
-            in2EdgeLatch = false;
-        }
-    }
 }
 
 void interruptPWM()
@@ -556,13 +582,13 @@ void setup()
     buttons[2].init(BTN_RE, false, false, true);
     buttons[2].setHoldTime(500);
     in1.init(IN1);
-    // in2.init(IN2);
     cvIn.init(CV1);
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
     agc.init(DAC_RESO, OSC_COUNT, 0.35);
+    gateEdge.init(IN2);
 
-    rgbLedControl.init(10000, PWM_BIT, LED_R, LED_G, LED_B);
+    rgbLedControl.init(40000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(oscColor);
     rgbLedControl.ignoreMenuColor(false);
     rgbLedControl.setWave(MiniOsc::Wave::TRI);
@@ -603,12 +629,6 @@ void setup()
     }
 
     initPWMIntr(PWM_INTR_PIN, interruptPWM, &interruptSliceNum, SAMPLE_FREQ, INTR_PWM_RESO, CPU_CLOCK);
-
-    gpio_init(IN2);
-    gpio_set_irq_enabled(IN2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_callback(edgeCallback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
-
 }
 
 void loop()
@@ -619,7 +639,7 @@ void loop()
     int16_t cvInValue = cvIn.analogReadDirectFast() - (ADC_RESO >> 1);
     int16_t potValue = pot.analogReadDirectFast();
 
-    agc.update(3);
+    agc.update(6);
 
     if (oscSelect == OscillatorSelect::SETUP)
     {
@@ -632,11 +652,12 @@ void loop()
 
     rgbLedControl.process();
     tight_loop_contents();
-    sleep_us(100);
 }
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
+    sleep_ms(500);
 }
 
 void loop1()
