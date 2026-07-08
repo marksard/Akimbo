@@ -5,6 +5,38 @@
  * see https://opensource.org/licenses/MIT
  */
 
+/*
+# DualEG
+
+DualEGは、ADSRエンベロープジェネレーターを2基備えたファームウェアです。  
+独立動作するため別々に制御可能です。  
+
+## 機能概要
+
+- 入力
+  - `IN1` EnvA用トリガー入力
+  - `IN2` EnvB用トリガー入力
+  - `CV` 共通モジュレーション入力
+  - `POT` タイム、レベル調整
+  - `RE` ステージ選択
+- 出力
+  - `OUT1` EnvA出力
+  - `OUT2` EnvB出力
+  - `RGB LED` エンベロープ出力レベル表示、ステージ選択表示
+
+## 使い方
+
+- モード
+  - `RE押し込み` Lin/Expカーブ切り替え
+  - `Aボタン` EnvAの設定を選択
+  - `Bボタン` EnvBの設定を選択
+  - `Aボタン押下中にBボタン押下` 現在の設定値を保存
+  - `Aボタン押下中にRE操作` CVモジュレーション適用先の設定：`未使用<->Attack<->Decay<->Sustain<->Release`
+
+- ステージ選択：
+  - `POT操作`：Attack,Decay,Releaseは時間の調整、Sustainはレベルの調整
+*/
+
 #include <Arduino.h>
 #include <numeric>
 #include <hardware/pwm.h>
@@ -18,6 +50,7 @@
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
 #include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -438,6 +471,7 @@ void loop()
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
     sleep_ms(500);
 }
 

@@ -18,6 +18,7 @@
 #include "lib/RGBLEDPWMControl.hpp"
 #include "lib/EepRomConfigIO.hpp"
 #include "lib/Mcp4922SwSpi.hpp"
+// #include "lib/Mcp4922HwSpi.hpp"
 #include "lib/pwm_wrapper.h"
 #include "lib/ValueLock.hpp"
 #include "gpio_mapping.h"
@@ -26,6 +27,34 @@
 #include "Helper.h"
 
 #include "SlopeGenerator.hpp"
+
+/*
+# SlopeGenerator
+
+SlopeGeneratorは西海岸シンセシス系のエンベロープジェネレータ系ファームウェアです。  
+Cycle機能、Time入力、EOC出力を備え、Makenoise系の動作を簡易的にシミュレーションしています。  
+
+## 機能概要
+
+- 入力
+  - `IN1` トリガー入力
+  - `CV` Time入力
+  - `POT` カーブ変化：`LOG~LINEAR~EXP`
+  - `RE` 時間調整
+- 出力
+  - `OUT1` Slope出力
+  - `OUT2` EOC出力
+  - `RGB LED` Slope出力状態表示、Rise、Fall選択表示
+
+## 使い方
+
+- Rise、Fall設定
+  - `RE押し込み` Cycleモード(LFOモード)のON/OFF
+  - `Aボタン` Riseの設定を選択
+  - `Bボタン` Fallの設定を選択
+  - `RE長押し` トリガー/ゲートモードの切り替え
+  - `RE操作` Rise、Fall時間調整
+*/
 
 enum SettingMenu
 {
@@ -230,6 +259,8 @@ void setup()
     rgbLedControl.ignoreMenuColor(false);
     rgbLedControl.setWave(MiniOsc::Wave::SQU);
 
+    slope.init(SAMPLE_FREQ);
+
     systemConfig.initEEPROM();
     systemConfig.loadUserConfig();
 
@@ -238,8 +269,6 @@ void setup()
     gpio_set_irq_enabled(IN1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_callback(edgeCallback);
     irq_set_enabled(IO_IRQ_BANK0, true);
-
-    slope.init(SAMPLE_FREQ);
 }
 
 void loop()
@@ -258,6 +287,7 @@ void loop()
 
 void setup1()
 {
+    // core0のsetupを終わらせてcore1開始したいので適当いれておく
     sleep_ms(500);
 }
 
