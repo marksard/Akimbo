@@ -23,13 +23,13 @@ public:
     /// @param gainMax Gainの最大値。0.0-1.0の範囲で指定
     void init(int16_t reso, int16_t waveMixCount, float gainMax)
     {
-        // 浮動小数点演算を避けるため、gain計算はCALC_SHIFTぶんシフトして整数演算にする
         _reso = reso;
         _bias = reso >> 1;
-        _gainMax = gainMax * (1 << GAIN_SHIFT);
+
+        _gainMax = (int32_t)(gainMax * (1 << GAIN_SHIFT));
         _divs = _bias << GAIN_SHIFT;
 
-        _peak = waveMixCount * (_bias - 1);
+        _peak = max(1, waveMixCount * (_bias - 1));
         _gain = _gainMax;
         _level = 0;
     }
@@ -39,7 +39,10 @@ public:
     /// @param levelR 右チャンネルの音量。バイアスなしsigned
     inline void setCurrentLevel(int16_t levelL, int16_t levelR = 0)
     {
-        _level = std::max(abs(levelL), abs(levelR));
+        uint16_t l = abs(levelL);
+        uint16_t r = abs(levelR);
+
+        _level = max(l, r);
     }
 
     /// @brief AGCの処理後の音量を取得
@@ -50,13 +53,22 @@ public:
         return constrain(((level * _gain) >> GAIN_SHIFT) + _bias, 0, _reso - 1);
     }
 
-    /// @brief AGCの更新
-    /// @param decaySpeed
-    inline void update(float decaySpeed = 1.0)
+    /// @brief AGC更新
+    /// @param decaySpeed ピーク減衰量(1以上)
+    inline void update(uint16_t decaySpeed = 1)
     {
-        // レベルが大きくなったら上書き。それ以外は徐々に減衰
-        _peak = (_level > _peak) ? _level : _peak - decaySpeed;
-        _gain = min(_divs / _peak, _gainMax);
+        if (_level > _peak)
+        {
+            _peak = _level;
+        }
+        else
+        {
+            _peak = (_peak > decaySpeed) ? (_peak - decaySpeed) : 1;
+        }
+
+        int32_t gain = _divs / _peak;
+
+        _gain = (gain < _gainMax) ? gain : _gainMax;
     }
 
     /// @brief AGCの最大ゲインを設定
@@ -64,7 +76,7 @@ public:
     inline void setGainMax(float gainMax)
     {
         gainMax = constrain(gainMax, 0.0f, 1.0f);
-        _gainMax = gainMax * (1 << GAIN_SHIFT);
+        _gainMax = (int32_t)(gainMax * (1 << GAIN_SHIFT));
     }
 
     void print()
@@ -84,7 +96,7 @@ private:
     int16_t _bias;
     int32_t _gainMax;
     int32_t _divs;
-    float _peak;
+    uint16_t _peak;
     int32_t _gain;
     int16_t _level;
 };

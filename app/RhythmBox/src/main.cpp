@@ -358,7 +358,7 @@ void setup()
     pot.init(POT1);
     dac.init(SPI_MOSI, SPI_SCK, SPI_CS);
     // gain最大値の設定は全部同時に鳴ることはほぼないため大きめにしている
-    agc.init(DAC_RESO, SOUND_BANK_COUNT, 0.93);
+    agc.init(DAC_RESO, SOUND_BANK_COUNT, 0.95);
 
     rgbLedControl.init(4000, PWM_BIT, LED_R, LED_G, LED_B);
     rgbLedControl.setMenuColor(menuColor);
@@ -389,7 +389,7 @@ void loop()
     int16_t potValue = pot.analogReadDirectFast();
     bool cvHigh = cvInValue > (ADC_RESO >> 2);
 
-    agc.update(0.3);
+    agc.update(16);
 
     pKit[0][userConfig.Config.selectWave[0]]->play(gpio_get(IN2));
     pKit[1][userConfig.Config.selectWave[1]]->play(gpio_get(IN1));

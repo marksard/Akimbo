@@ -639,7 +639,7 @@ void loop()
     int16_t cvInValue = cvIn.analogReadDirectFast() - (ADC_RESO >> 1);
     int16_t potValue = pot.analogReadDirectFast();
 
-    agc.update(6);
+    agc.update(8);
 
     if (oscSelect == OscillatorSelect::SETUP)
     {
