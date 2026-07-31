@@ -126,7 +126,7 @@ public:
                 currentV -= fallStepInv * scale;
 
                 // 終了
-                if (currentV <= 0.0f)
+                if (currentV <= eocThresholdV)
                 {
                     currentV = 0.0f;
                     isActive = false;
@@ -161,6 +161,8 @@ public:
     }
 
 private:
+    static constexpr float eocThresholdV = 0.001f;
+
     float sampleRate;
     float currentV; // 現在の出力電圧状態 (0.0f ～ 1.0f)
     bool isRising;
@@ -205,13 +207,14 @@ private:
     void processTriggerMode(bool trigger)
     {
         // セルフサイクルの処理（動作中でなく、かつCycle有効ならトリガー）
-        if (cycle && !isActive && currentV <= 0.0001f)
+        if (cycle && !isActive && currentV <= eocThresholdV)
         {
             trigger = true;
         }
 
         // トリガーが入ったらRise（上昇）を開始
-        if (trigger && !isRising)
+        // if (trigger && !isRising) // Rising中無視
+        if (trigger && !isActive) // EOCまでトリガー無視
         {
             beginRise();
         }
@@ -227,7 +230,7 @@ private:
         {
             beginFall();
         }
-        else if (cycle && !gate && !isActive && currentV <= 0.0001f)
+        else if (cycle && !gate && !isActive && currentV <= eocThresholdV)
         {
             beginRise();
         }
