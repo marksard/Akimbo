@@ -156,6 +156,8 @@ public:
         slopeMode = (slopeMode == SlopeMode::S) ? SlopeMode::M : SlopeMode::S;
     }
 
+    inline SlopeMode getSlopeMode() { return slopeMode; }
+
 private:
     static constexpr float eocThresholdV = 0.0001f;
 
@@ -203,12 +205,14 @@ private:
     void processTriggerMode(bool trigger)
     {
         // セルフサイクルの処理（動作中でなく、かつCycle有効ならトリガー）
-        if (cycle && !isActive && currentV <= eocThresholdV)
+        if (cycle)
         {
-            trigger = true;
+            if (!isActive)
+            {
+                beginRise();
+            }
         }
-
-        if (slopeMode == SlopeMode::S && trigger && !isActive)
+        else if (slopeMode == SlopeMode::S && trigger && !isActive)
         {
             // 動作中リトリガーしない (Serge DSG)
             beginRise();

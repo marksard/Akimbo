@@ -165,7 +165,12 @@ void process(int16_t cvInValue, int16_t potValue)
     // both CVは…
     //     電圧が高くなるほど周波数が高くなる。+電圧：時間-、-電圧：時間+ (Makenoise Maths)
     //     電圧が高くなるほど遅くなる。+電圧：時間+、-電圧：時間- (Serge DSG)
-    float timeCV = -cvInValue * timeRatio + 1;
+    int8_t rate_time = 1;
+    if (slope.getSlopeMode() == SlopeGenerator::SlopeMode::M)
+    {
+        rate_time = -1;
+    }
+    float timeCV = rate_time * cvInValue * timeRatio + 1;
     float shape = (potValue - (ADC_RESO >> 1)) * adcScaleRatio;
     slope.update(rise * timeCV, fall * timeCV, shape);
     rgbLedControl.setLevelMap(slope.getValue() * 2047, 0, 2047, 7);
@@ -185,7 +190,7 @@ void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     {
         slope.toggleCycle();
     }
-    else if (buttonStates == ButtonCondition::LRE)
+    else if (buttonStates == ButtonCondition::HA_RE)
     {
         slope.toggleSlopeMode();
     }
