@@ -11,10 +11,10 @@
 class SlopeGenerator
 {
 public:
-    enum class InputMode
+    enum SlopeMode
     {
-        Trigger,
-        Gate,
+        M,  // Makenoise系
+        S,  // Serge系
     };
 
     SlopeGenerator(float samplingFreq = 44100.0f)
@@ -30,7 +30,7 @@ public:
         eocPulse = false;
         isActive = false;
         cycle = false;
-        inputMode = InputMode::Trigger;
+        slopeMode = SlopeMode::S;
         riseTimeSec = 0.0f;
         fallTimeSec = 0.1f;
         internalShape = 0.0f;
@@ -65,13 +65,13 @@ public:
         if (shape < -1.0f)
             shape = -1.0f;
 
-        internalShape = -shape;
+        internalShape = shape;
         updateSteps();
     }
 
     inline float process(bool gate)
     {
-        // Trigger style EOC
+        // Trigger style EOC (VCV Rack Befaco Rampage)
         // if (eocCounter > 0)
         // {
         //     eocCounter--;
@@ -85,23 +85,24 @@ public:
         bool gateFallingEdge = !gate && lastGate;
         lastGate = gate;
 
-        if (inputMode == InputMode::Gate)
-        {
-            processGateMode(gate, gateRisingEdge, gateFallingEdge);
-        }
-        else
-        {
-            processTriggerMode(gateRisingEdge);
-        }
+        processTriggerMode(gateRisingEdge);
 
         // --- 充放電の計算 ---
         if (isActive)
         {
             if (isRising)
             {
-                eocPulse = false; // Gate style EOC
+                if (slopeMode == SlopeMode::S)
+                {
+                    // RiseからEOC ON (Serge DSG)
+                    eocPulse = true;
+                }
 
                 float scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
+
+                // Riseは指数/対数が逆 (VCV Rack Befaco Rampage)
+                // float invV = 1.0f - currentV;
+                // float scale = (1.0f - internalShape) * (1.0f - invV) + (internalShape + 1.0f) * invV;
 
                 if (scale < 0.01f)
                     scale = 0.01f;
@@ -116,9 +117,9 @@ public:
             }
             else
             {
-                // 下降の計算
-                float invV = 1.0f - currentV;
-                float scale = (1.0f - internalShape) * (1.0f - invV) + (internalShape + 1.0f) * invV;
+                eocPulse = false; // Gate style EOC (Makenoise Maths / Serge DSG)
+
+                float scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
 
                 if (scale < 0.01f)
                     scale = 0.01f;
@@ -131,7 +132,12 @@ public:
                     currentV = 0.0f;
                     isActive = false;
 
-                    eocPulse = true;
+                    if (slopeMode == SlopeMode::M)
+                    {
+                        // Fall終了からEOC ON (Makenoise Maths)
+                        eocPulse = true;
+                    }
+
                     eocCounter = eocDurationSamples;
                 }
             }
@@ -144,24 +150,14 @@ public:
     inline float getValue() const { return currentV; }
     inline bool getEOC() const { return eocPulse; }
     inline void toggleCycle() { cycle = !cycle; }
-    inline void setInputMode(InputMode mode)
-    {
-        if (inputMode == mode)
-        {
-            return;
-        }
 
-        inputMode = mode;
-        resetRuntimeState();
-    }
-    inline void toggleInputMode()
+    inline void toggleSlopeMode()
     {
-        inputMode = (inputMode == InputMode::Trigger) ? InputMode::Gate : InputMode::Trigger;
-        resetRuntimeState();
+        slopeMode = (slopeMode == SlopeMode::S) ? SlopeMode::M : SlopeMode::S;
     }
 
 private:
-    static constexpr float eocThresholdV = 0.001f;
+    static constexpr float eocThresholdV = 0.0001f;
 
     float sampleRate;
     float currentV; // 現在の出力電圧状態 (0.0f ～ 1.0f)
@@ -170,7 +166,7 @@ private:
     bool eocPulse;
     bool isActive;
     bool cycle;
-    InputMode inputMode;
+    SlopeMode slopeMode;
 
     // --- 事前計算（キャッシュ）用メンバ変数 ---
     float riseTimeSec;   // 現在設定されている上昇時間（秒）
@@ -212,32 +208,15 @@ private:
             trigger = true;
         }
 
-        // トリガーが入ったらRise（上昇）を開始
-        // if (trigger && !isRising) // Rising中無視
-        if (trigger && !isActive) // EOCまでトリガー無視
+        if (slopeMode == SlopeMode::S && trigger && !isActive)
         {
+            // 動作中リトリガーしない (Serge DSG)
             beginRise();
         }
-    }
-
-    void processGateMode(bool gate, bool gateRisingEdge, bool gateFallingEdge)
-    {
-        if (gate && (gateRisingEdge || currentV < 1.0f))
+        else if (slopeMode == SlopeMode::M && trigger && !isRising)
         {
+            // Rising中リトリガーしない (Makenoise Maths)
             beginRise();
-        }
-        else if (gateFallingEdge)
-        {
-            beginFall();
-        }
-        else if (cycle && !gate && !isActive && currentV <= eocThresholdV)
-        {
-            beginRise();
-        }
-
-        if (gate && !isRising && currentV >= 1.0f)
-        {
-            isActive = false;
         }
     }
 

@@ -162,7 +162,9 @@ bool updatePotLock(int16_t potValue, int8_t sel1, int8_t sel2)
 
 void process(int16_t cvInValue, int16_t potValue)
 {
-    // timeCVは電圧が高いほど周波数も高くなる。+電圧：時間-、-電圧：時間+
+    // both CVは…
+    //     電圧が高くなるほど周波数が高くなる。+電圧：時間-、-電圧：時間+ (Makenoise Maths)
+    //     電圧が高くなるほど遅くなる。+電圧：時間+、-電圧：時間- (Serge DSG)
     float timeCV = -cvInValue * timeRatio + 1;
     float shape = (potValue - (ADC_RESO >> 1)) * adcScaleRatio;
     slope.update(rise * timeCV, fall * timeCV, shape);
@@ -185,7 +187,7 @@ void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     }
     else if (buttonStates == ButtonCondition::LRE)
     {
-        slope.toggleInputMode();
+        slope.toggleSlopeMode();
     }
     else if (buttonStates == ButtonCondition::NONE)
     {
