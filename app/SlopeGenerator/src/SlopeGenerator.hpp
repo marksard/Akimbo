@@ -15,6 +15,7 @@ public:
     {
         M,  // Makenoise系
         S,  // Serge系
+        B,  // Befaco
     };
 
     SlopeGenerator(float samplingFreq = 44100.0f)
@@ -71,15 +72,18 @@ public:
 
     inline float process(bool gate)
     {
-        // Trigger style EOC (VCV Rack Befaco Rampage)
-        // if (eocCounter > 0)
-        // {
-        //     eocCounter--;
-        //     if (eocCounter == 0)
-        //     {
-        //         eocPulse = false; // 指定サンプル数経過したらパルスOFF
-        //     }
-        // }
+        if (slopeMode == SlopeMode::B)
+        {
+            // Trigger style EOC (VCV Rack Befaco Rampage)
+            if (eocCounter > 0)
+            {
+                eocCounter--;
+                if (eocCounter == 0)
+                {
+                    eocPulse = false; // 指定サンプル数経過したらパルスOFF
+                }
+            }
+        }
 
         bool gateRisingEdge = gate && !lastGate;
         bool gateFallingEdge = !gate && lastGate;
@@ -98,11 +102,18 @@ public:
                     eocPulse = true;
                 }
 
-                float scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
-
-                // Riseは指数/対数が逆 (VCV Rack Befaco Rampage)
-                // float invV = 1.0f - currentV;
-                // float scale = (1.0f - internalShape) * (1.0f - invV) + (internalShape + 1.0f) * invV;
+                float scale = 0.0f;
+                
+                if (slopeMode == SlopeMode::B)
+                {
+                    // Riseは指数/対数が逆 (VCV Rack Befaco Rampage)
+                    float invV = 1.0f - currentV;
+                    scale = (1.0f - internalShape) * (1.0f - invV) + (internalShape + 1.0f) * invV;
+                }
+                else
+                {
+                    scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
+                }
 
                 if (scale < 0.01f)
                     scale = 0.01f;
@@ -117,7 +128,11 @@ public:
             }
             else
             {
-                eocPulse = false; // Gate style EOC (Makenoise Maths / Serge DSG)
+                if (slopeMode == SlopeMode::M || slopeMode == SlopeMode::S)
+                {
+                    // Gate style EOC (Makenoise Maths / Serge DSG)
+                    eocPulse = false;
+                }
 
                 float scale = (1.0f - internalShape) * (1.0f - currentV) + (internalShape + 1.0f) * currentV;
 
@@ -132,7 +147,7 @@ public:
                     currentV = 0.0f;
                     isActive = false;
 
-                    if (slopeMode == SlopeMode::M)
+                    if (slopeMode == SlopeMode::M || slopeMode == SlopeMode::B)
                     {
                         // Fall終了からEOC ON (Makenoise Maths)
                         eocPulse = true;
@@ -150,10 +165,10 @@ public:
     inline float getValue() const { return currentV; }
     inline bool getEOC() const { return eocPulse; }
     inline void toggleCycle() { cycle = !cycle; }
-
-    inline void toggleSlopeMode()
+    
+    inline void addSlopeMode(int8_t delta)
     {
-        slopeMode = (slopeMode == SlopeMode::S) ? SlopeMode::M : SlopeMode::S;
+        slopeMode = (SlopeMode)constrain((int8_t)slopeMode + delta, (int8_t)SlopeMode::M, (int8_t)SlopeMode::B);
     }
 
     inline SlopeMode getSlopeMode() { return slopeMode; }
@@ -217,9 +232,9 @@ private:
             // 動作中リトリガーしない (Serge DSG)
             beginRise();
         }
-        else if (slopeMode == SlopeMode::M && trigger && !isRising)
+        else if ((slopeMode == SlopeMode::M || slopeMode == SlopeMode::B) && trigger && !isRising)
         {
-            // Rising中リトリガーしない (Makenoise Maths)
+            // Rising中リトリガーしない (Makenoise Maths / Befaco Rampage)
             beginRise();
         }
     }

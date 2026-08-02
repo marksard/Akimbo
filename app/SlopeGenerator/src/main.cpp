@@ -31,8 +31,8 @@
 /*
 # SlopeGenerator
 
-SlopeGeneratorは西海岸シンセシス系のエンベロープジェネレータ系ファームウェアです。  
-Cycle機能、Time入力、EOC出力を備え、Makenoise系の動作を簡易的にシミュレーションしています。  
+SlopeGeneratorは西海岸シンセシス系のエンベロープジェネレータ系ファームウェアです。
+Cycle機能、Time入力、EOC出力を備え、Makenoise系の動作を簡易的にシミュレーションしています。
 
 ## 機能概要
 
@@ -60,7 +60,8 @@ enum SettingMenu
 {
     SEL_RISE = 0,
     SEL_FALL,
-    SEL_MAX = SEL_FALL,
+    SEL_SLOPE_MODE,
+    SEL_MAX = SEL_SLOPE_MODE,
 };
 
 enum ButtonCondition
@@ -129,6 +130,9 @@ void updateMenuColor()
     case SettingMenu::SEL_FALL:
         oscColor = RGBLEDPWMControl::MenuColor::CYAN;
         break;
+    case SettingMenu::SEL_SLOPE_MODE:
+        oscColor = RGBLEDPWMControl::MenuColor::RED;
+        break;
     default:
         break;
     }
@@ -138,7 +142,7 @@ void updateMenuColor()
 
 void changeMenu(int encValue)
 {
-    settingMenu = (SettingMenu)constrain((int8_t)(settingMenu + encValue), SettingMenu::SEL_RISE, SettingMenu::SEL_FALL);
+    settingMenu = (SettingMenu)constrain((int8_t)(settingMenu + encValue), SettingMenu::SEL_RISE, SettingMenu::SEL_MAX);
     updateMenuColor();
 }
 
@@ -166,14 +170,17 @@ void process(int16_t cvInValue, int16_t potValue)
     //     電圧が高くなるほど周波数が高くなる。+電圧：時間-、-電圧：時間+ (Makenoise Maths)
     //     電圧が高くなるほど遅くなる。+電圧：時間+、-電圧：時間- (Serge DSG)
     int8_t rate_time = 1;
-    if (slope.getSlopeMode() == SlopeGenerator::SlopeMode::M)
+    if (slope.getSlopeMode() == SlopeGenerator::SlopeMode::M || slope.getSlopeMode() == SlopeGenerator::SlopeMode::B)
     {
         rate_time = -1;
     }
     float timeCV = rate_time * cvInValue * timeRatio + 1;
     float shape = (potValue - (ADC_RESO >> 1)) * adcScaleRatio;
     slope.update(rise * timeCV, fall * timeCV, shape);
-    rgbLedControl.setLevelMap(slope.getValue() * 2047, 0, 2047, 7);
+    if (settingMenu == SettingMenu::SEL_RISE || settingMenu == SettingMenu::SEL_FALL)
+    {
+        rgbLedControl.setLevelMap(slope.getValue() * 2047, 0, 2047, 7);
+    }
 }
 
 void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
@@ -190,10 +197,6 @@ void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
     {
         slope.toggleCycle();
     }
-    else if (buttonStates == ButtonCondition::HA_RE)
-    {
-        slope.toggleSlopeMode();
-    }
     else if (buttonStates == ButtonCondition::NONE)
     {
         switch (settingMenu)
@@ -204,6 +207,10 @@ void operation(uint16_t buttonStates, int8_t encValue, int16_t potValue)
             break;
         case SettingMenu::SEL_FALL:
             fall = constrain(fall + (encValue * riseFallStep), 0.0, 2.0);
+            break;
+        case SettingMenu::SEL_SLOPE_MODE:
+            slope.addSlopeMode(encValue);
+            rgbLedControl.setRainbowLevel((int16_t)slope.getSlopeMode(), SlopeGenerator::SlopeMode::M, SlopeGenerator::SlopeMode::B);
             break;
         }
     }
@@ -287,7 +294,6 @@ void loop()
 
     process(cvInValue, potValue);
 
-    rgbLedControl.update();
     rgbLedControl.process();
     tight_loop_contents();
 }
@@ -309,6 +315,7 @@ void loop1()
 
     operation(buttonStates, encValue, potValue);
 
+    rgbLedControl.update();
     tight_loop_contents();
     sleep_ms(10);
 }
